@@ -344,6 +344,8 @@ function HelpTab() {
           <dd>Step back / forward on the piste</dd>
           <dt>, .</dt>
           <dd>Previous / next step</dd>
+          <dt>Space</dt>
+          <dd>Play / stop</dd>
           <dt>N</dt>
           <dd>New step (copies this one)</dd>
           <dt>Ctrl+Z / Ctrl+Shift+Z</dt>

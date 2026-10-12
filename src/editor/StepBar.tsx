@@ -1,47 +1,125 @@
+import { useEffect, useRef, useState } from 'react';
+import { keyAt } from '../viewer/player.ts';
 import { useEditor } from './store.ts';
 
-/** The combination as a row of steps along the bottom of the stage. */
+/**
+ * The combination as a row of steps along the bottom of the stage: play it,
+ * move between steps, add one. What can be done to a step (move, delete,
+ * motion only) is in the ⋯ menu on the step you are on.
+ */
 export function StepBar() {
   const s = useEditor();
   const steps = s.combination.steps;
   const last = steps.length - 1;
+  const playing = !!s.preview;
+  const shownIndex = s.preview ? keyAt(s.combination, s.preview.pos) : s.stepIndex;
 
   return (
     <nav className="step-bar" aria-label="Steps">
-      <button onClick={() => s.goToStep(s.stepIndex - 1)} disabled={s.stepIndex === 0} title="Previous step (,)">
-        ‹ Prev
+      <button
+        className={`play${playing ? ' on' : ''}`}
+        onClick={playing ? s.stopPreview : s.startPreview}
+        disabled={steps.length < 2}
+        title={playing ? 'Stop (Space)' : 'Play the combination smoothly from this step (Space)'}
+      >
+        {playing ? '■ Stop' : '▶ Play'}
+      </button>
+      <span className="divider" />
+      <button className="nav" onClick={() => s.goToStep(s.stepIndex - 1)} disabled={s.stepIndex === 0 || playing} title="Previous step (,)" aria-label="Previous step">
+        ‹
       </button>
       <ol>
         {steps.map((step, i) => (
           <li key={step.id}>
-            <button
-              className={[i === s.stepIndex ? 'on' : '', step.motionOnly ? 'via' : ''].join(' ')}
-              title={step.motionOnly ? 'Motion only: shapes smooth playback, skipped when stepping' : undefined}
-              aria-current={i === s.stepIndex ? 'step' : undefined}
-              onClick={() => s.goToStep(i)}
-            >
-              <span className="num">{i + 1}</span>
-              {step.label || <span className="untitled">{step.motionOnly ? 'via' : 'Untitled'}</span>}
-            </button>
+            <div className={`step-chip${i === shownIndex ? ' on' : ''}${step.motionOnly ? ' via' : ''}`}>
+              <button
+                className="go"
+                aria-current={i === shownIndex ? 'step' : undefined}
+                title={step.motionOnly ? 'Motion only: shapes smooth playback, skipped when stepping' : undefined}
+                onClick={() => {
+                  if (playing) s.stopPreview();
+                  s.goToStep(i);
+                }}
+              >
+                <span className="num">{i + 1}</span>
+                {step.label || <span className="untitled">{step.motionOnly ? 'via' : 'Untitled'}</span>}
+              </button>
+              {i === s.stepIndex && !playing && <StepMenu index={i} last={last} />}
+            </div>
           </li>
         ))}
       </ol>
-      <button onClick={() => s.goToStep(s.stepIndex + 1)} disabled={s.stepIndex === last} title="Next step (.)">
-        Next ›
+      <button className="nav" onClick={() => s.goToStep(s.stepIndex + 1)} disabled={s.stepIndex === last || playing} title="Next step (.)" aria-label="Next step">
+        ›
       </button>
       <span className="divider" />
-      <button onClick={s.addStep} title="New step after this one, starting from this pose (N)">
+      <button className="primary" onClick={s.addStep} disabled={playing} title="Add a step after this one, starting from this pose (N)">
         + New step
       </button>
-      <button onClick={() => s.moveStep(-1)} disabled={s.stepIndex === 0} title="Move this step earlier">
-        ←
-      </button>
-      <button onClick={() => s.moveStep(1)} disabled={s.stepIndex === last} title="Move this step later">
-        →
-      </button>
-      <button onClick={s.deleteStep} disabled={steps.length < 2} title="Delete this step (undo brings it back)">
-        Delete
-      </button>
     </nav>
+  );
+}
+
+function StepMenu({ index, last }: { index: number; last: number }) {
+  const s = useEditor();
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [at, setAt] = useState({ left: 0, bottom: 0 });
+  const box = useRef<HTMLDivElement>(null);
+  const step = s.combination.steps[index];
+
+  useEffect(() => {
+    if (!open) return;
+    setConfirm(false);
+    const r = box.current!.getBoundingClientRect();
+    setAt({ left: Math.max(8, Math.min(r.left - 160, window.innerWidth - 250)), bottom: window.innerHeight - r.top + 6 });
+    const onDown = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const act = (fn: () => void) => {
+    fn();
+    setOpen(false);
+  };
+
+  return (
+    <div className="step-more" ref={box}>
+      <button className="more" aria-label={`Step ${index + 1} options`} aria-expanded={open} onClick={() => setOpen(!open)}>
+        ⋯
+      </button>
+      {open && (
+        <div className="menu" role="menu" style={{ left: at.left, bottom: at.bottom, top: 'auto' }}>
+          {!confirm ? (
+            <>
+              <button role="menuitem" disabled={index === 0} onClick={() => act(() => s.moveStep(-1))}>
+                ← Move this step earlier
+              </button>
+              <button role="menuitem" disabled={index === last} onClick={() => act(() => s.moveStep(1))}>
+                Move this step later →
+              </button>
+              <button role="menuitem" onClick={() => act(() => s.setStepOptions({ motionOnly: !step.motionOnly }))}>
+                {step.motionOnly ? 'Make it a normal step' : 'Make it motion only (a via step)'}
+              </button>
+              <button role="menuitem" className="danger" disabled={last === 0} onClick={() => setConfirm(true)}>
+                Delete this step…
+              </button>
+            </>
+          ) : (
+            <>
+              <p>Delete step {index + 1}? Undo (Ctrl+Z) brings it back.</p>
+              <div className="buttons">
+                <button className="danger-solid" onClick={() => act(s.deleteStep)}>
+                  Delete
+                </button>
+                <button onClick={() => setOpen(false)}>Cancel</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

@@ -39,6 +39,7 @@ import { clampDof, JOINT_BY_NAME, JOINTS, oppositeJoint, type JointName } from '
 import { mirrorPose } from '../model/mirror.ts';
 import { angle, type FencerSetup, type Pose } from '../model/types.ts';
 import type { PresetPose } from '../presets/builtin.ts';
+import { advance, keyAt } from '../viewer/player.ts';
 import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type ShownPreset } from '../presets/library.ts';
 
 export type PresetPart = 'all' | 'upper' | 'lower';
@@ -84,8 +85,16 @@ interface EditorState extends Snapshot {
   /** Locked: the camera cannot be orbited, panned or zoomed by hand. */
   cameraLocked: boolean;
   toggleCameraLock: () => void;
-  /** Give every step the current step's view. */
-  useViewForAllSteps: () => void;
+  /** Turn "one view for all steps" on (every step takes this step's view) or off. */
+  toggleSharedView: () => void;
+  /** Playing the combination smoothly inside the editor; null when not. */
+  preview: { pos: number } | null;
+  startPreview: () => void;
+  stopPreview: () => void;
+  tickPreview: (ms: number) => void;
+  /** Whether the A / B tags show above the fencers. */
+  showLabels: boolean;
+  toggleLabels: () => void;
   /** Ask the camera to frame both fencers, or one. */
   fitRequest: { who: 'both' | FencerId; id: number } | null;
   requestFit: (who: 'both' | FencerId) => void;
@@ -147,6 +156,14 @@ interface EditorState extends Snapshot {
 }
 
 const HISTORY_LIMIT = 200;
+
+function rememberedLabels(): boolean {
+  try {
+    return localStorage.getItem('fencing-poser.labels') !== 'off';
+  } catch {
+    return true;
+  }
+}
 const COALESCE_MS = 1000;
 
 export function currentStep(s: Snapshot): Step {
@@ -287,11 +304,38 @@ export const useEditor = create<EditorState>((set, get) => {
     setHeld: (held) => set((s) => (s.held.shift === held.shift && s.held.alt === held.alt ? {} : { held })),
     cameraLocked: false,
     toggleCameraLock: () => set((s) => ({ cameraLocked: !s.cameraLocked })),
-    useViewForAllSteps: () =>
+    toggleSharedView: () =>
       set((s) => {
+        if (s.combination.sharedView) return edit(s, { combination: { ...s.combination, sharedView: false } });
         const camera = currentStep(s).camera;
-        if (!camera) return {};
-        return edit(s, { combination: withSteps(s.combination, s.combination.steps.map((step) => ({ ...step, camera }))) });
+        const steps = camera ? s.combination.steps.map((step) => ({ ...step, camera })) : s.combination.steps;
+        return edit(s, { combination: { ...withSteps(s.combination, steps), sharedView: true } });
+      }),
+    preview: null,
+    startPreview: () =>
+      set((s) => {
+        const last = s.combination.steps.length - 1;
+        return { preview: { pos: s.stepIndex >= last ? 0 : s.stepIndex }, selected: null };
+      }),
+    stopPreview: () =>
+      set((s) => (s.preview ? { preview: null, stepIndex: keyAt(s.combination, s.preview.pos) } : {})),
+    tickPreview: (ms) =>
+      set((s) => {
+        if (!s.preview) return {};
+        const end = s.combination.steps.length - 1;
+        const pos = advance(s.combination, s.preview.pos, ms, end);
+        // At the end, stop on the last step.
+        return pos >= end ? { preview: null, stepIndex: end } : { preview: { pos } };
+      }),
+    showLabels: rememberedLabels(),
+    toggleLabels: () =>
+      set((s) => {
+        try {
+          localStorage.setItem('fencing-poser.labels', s.showLabels ? 'off' : 'on');
+        } catch {
+          // Only a preference.
+        }
+        return { showLabels: !s.showLabels };
       }),
     fitRequest: null,
     requestFit: (who) => set((s) => ({ fitRequest: { who, id: (s.fitRequest?.id ?? 0) + 1 } })),
@@ -321,9 +365,12 @@ export const useEditor = create<EditorState>((set, get) => {
     presetPart: 'all',
     setPresetPart: (presetPart) => set({ presetPart }),
     setStepCamera: (camera) =>
-      set((s) => ({
-        combination: { ...withStep(s, (step) => ({ ...step, camera })), updatedAt: new Date().toISOString() },
-      })),
+      set((s) => {
+        const combination = s.combination.sharedView
+          ? withSteps(s.combination, s.combination.steps.map((step) => ({ ...step, camera })))
+          : withStep(s, (step) => ({ ...step, camera }));
+        return { combination: { ...combination, updatedAt: new Date().toISOString() } };
+      }),
     flight: null,
     requestView: (camera) => set((s) => ({ flight: { camera, id: (s.flight?.id ?? 0) + 1, save: true } })),
     setDisplay: (change) =>
@@ -410,6 +457,8 @@ export const useEditor = create<EditorState>((set, get) => {
     setTitle: (title) => set((s) => edit(s, { combination: { ...s.combination, title } }, 'title')),
 
     start: async () => {
+      // Ask the browser not to clear this site's storage when the disk gets full.
+      void navigator.storage?.persist?.().catch(() => false);
       const [savedPresets, lastId, folder] = await Promise.all([loadPresets(), lastOpenId(), folderStatus()]);
       const last = lastId ? await loadCombination(lastId) : null;
       set({ savedPresets, presets: shownPresets(savedPresets), ...(last && fresh(last)), loaded: true, folder });

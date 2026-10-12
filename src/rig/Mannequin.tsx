@@ -91,7 +91,7 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect,
   return (
     <group ref={root}>
       {label && !ghost && (
-        <FencerTag text={label} active={active} position={[head.x, head.y + 0.31 * H, head.z]} onClick={onActivate} />
+        <FencerTag text={label} active={active} position={[head.x, head.y + 0.17 * H, head.z]} onClick={onActivate} />
       )}
       {part('pelvis', <Ellipsoid position={[0, -0.005 * H, 0]} radii={[0.07 * H, 0.055 * H, 0.1 * H * b]} />)}
       {part('abdomen', <Ellipsoid position={[0, 0.055 * H, 0]} radii={[0.06 * H, 0.068 * H, 0.085 * H * b]} />)}

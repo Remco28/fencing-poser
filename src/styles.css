@@ -1257,3 +1257,155 @@ button.danger-solid {
   border-color: #b42318;
   color: #fff;
 }
+
+/* ---- toolbar groups and switches ---- */
+
+.stage-tools {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: calc(100% - 24px);
+}
+
+.tool-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  width: 64px;
+}
+
+button.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button.switch .track {
+  width: 24px;
+  height: 14px;
+  border-radius: 999px;
+  background: #c4c9cf;
+  position: relative;
+  transition: background 0.15s;
+  flex: none;
+}
+
+button.switch .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.15s;
+}
+
+button.switch.on {
+  border-color: var(--accent);
+  background: #fff4ee;
+}
+
+button.switch.on .track {
+  background: var(--accent);
+}
+
+button.switch.on .knob {
+  left: 12px;
+}
+
+.stage-tools button[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ---- step bar ---- */
+
+.step-bar .play {
+  font-weight: 600;
+  min-width: 78px;
+}
+
+.step-bar .play.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.step-bar .nav {
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 10px;
+}
+
+.step-chip {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--control);
+}
+
+.step-chip button {
+  border: none;
+  background: none;
+}
+
+.step-chip .go {
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.step-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.step-chip.on button {
+  color: var(--accent-ink);
+}
+
+.step-chip.via {
+  border-style: dashed;
+  font-style: italic;
+}
+
+.step-more .more {
+  padding: 6px 8px 6px 2px;
+  font-weight: 700;
+}
+
+/* The step menu lives inside the highlighted chip; keep its own colours. */
+.step-chip .menu button {
+  color: var(--ink);
+  font-style: normal;
+}
+
+.step-chip .menu button.danger {
+  color: #b42318;
+}
+
+.step-chip .menu .buttons button.danger-solid {
+  color: #fff;
+  background: #b42318;
+}
+
+.step-chip .menu .buttons button:not(.danger-solid) {
+  border: 1px solid var(--line);
+  background: var(--control);
+}
+
+.step-chip .menu > button:disabled {
+  opacity: 0.4;
+}

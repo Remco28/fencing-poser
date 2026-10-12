@@ -80,6 +80,8 @@ export interface Combination {
   title: string;
   /** The collection it is filed under in the library ("Beginners", "Second intention"); none = unfiled. */
   collection?: string;
+  /** One view for every step: moving the camera on any step moves it for all. */
+  sharedView?: boolean;
   fencers: Record<FencerId, FencerSetup>;
   steps: Step[];
   createdAt: string;

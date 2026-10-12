@@ -47,6 +47,16 @@ export function useKeyboardPosing() {
       }
       if (mod) return;
 
+      // Space plays the combination; while it plays, any key stops it first.
+      if (key === ' ') {
+        e.preventDefault();
+        return s.preview ? s.stopPreview() : s.startPreview();
+      }
+      if (s.preview) {
+        if (!['Shift', 'Alt', 'Control', 'Meta'].includes(e.key)) s.stopPreview();
+        return;
+      }
+
       if (key === 'Tab') {
         // Tab still walks the panel's controls when one of them has focus.
         if (e.target instanceof HTMLElement && e.target.closest('.panel')) return;

@@ -1,38 +1,17 @@
 import { OrbitControls } from '@react-three/drei';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Vector3 } from 'three';
 import { formatDistance, type Units } from '../model/units.ts';
-import { FENCERS, HEADING, targetParts, type Combination, type StepCamera } from '../model/combination.ts';
+import { FENCERS, HEADING, targetParts, type Combination } from '../model/combination.ts';
 import { Mannequin } from '../rig/Mannequin.tsx';
-import { CameraRig, fitToAspect, type Flight } from '../scene/CameraRig.tsx';
+import { CameraRig, type Flight } from '../scene/CameraRig.tsx';
+import { CameraDriver, Ticker } from '../scene/playback.tsx';
 import { Environment } from '../scene/Environment.tsx';
 import { measure, viewFor } from '../scene/measure.ts';
 import { ReadoutLines } from '../scene/Readouts.tsx';
 import { advance, frameAt, keyAt, keySteps, nextKey, prevKey } from './player.ts';
 
 type Mode = 'steps' | 'smooth';
-
-/** Calls back every animation frame with the time since the last one. */
-function Ticker({ onTick }: { onTick: (ms: number) => void }) {
-  useFrame((_, delta) => onTick(Math.min(delta, 0.1) * 1000));
-  return null;
-}
-
-/** While playing smoothly, the camera follows the combination's own views. */
-function CameraDriver({ view }: { view: StepCamera | undefined }) {
-  const camera = useThree((s) => s.camera);
-  const aspect = useThree((s) => s.size.width / s.size.height);
-  const controls = useThree((s) => s.controls) as unknown as { target: Vector3; update: () => void } | null;
-  useFrame(() => {
-    if (!view || !controls) return;
-    const fitted = fitToAspect(view, aspect);
-    camera.position.set(...fitted.position);
-    controls.target.set(...fitted.target);
-    controls.update();
-  });
-  return null;
-}
 
 /** Read-only player for a shared combination: what a student sees. */
 export function Viewer({ combination: c, units = 'metric' }: { combination: Combination; units?: Units }) {
@@ -134,7 +113,7 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
         {m && <ReadoutLines m={m} />}
         <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} />
         <CameraRig flight={flight} fitAspect />
-        {playing && <CameraDriver view={frame.camera ?? viewFor('side', shown)} />}
+        {playing && <CameraDriver fit view={frame.camera ?? viewFor('side', shown)} />}
         <Ticker onTick={onTick} />
       </Canvas>
 

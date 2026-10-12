@@ -17,6 +17,9 @@ import { Environment } from '../scene/Environment.tsx';
 import { ReadoutLines } from '../scene/Readouts.tsx';
 import { formatDistance } from '../model/units.ts';
 import { currentStep, useEditor } from './store.ts';
+import { Switch } from '../ui/Switch.tsx';
+import { CameraDriver, Ticker } from '../scene/playback.tsx';
+import { frameAt, keyAt } from '../viewer/player.ts';
 
 // Dev aid: ?view=top|front|back|side|near|nearback|nearfront picks the start view.
 const VIEWS: Record<string, [number, number, number]> = {
@@ -32,8 +35,12 @@ const START = VIEWS[new URLSearchParams(location.search).get('view') ?? ''] ?? [
 
 export function Stage() {
   const s = useEditor();
-  const step = currentStep(s);
-  const previous = s.stepIndex > 0 ? s.combination.steps[s.stepIndex - 1] : null;
+  const editingStep = currentStep(s);
+  // While previewing, show the in-between frame and the step it belongs to.
+  const playing = !!s.preview;
+  const frame = useMemo(() => (s.preview ? frameAt(s.combination, s.preview.pos) : null), [s.preview, s.combination]);
+  const step = s.preview ? { ...s.combination.steps[keyAt(s.combination, s.preview.pos)], poses: frame!.poses } : editingStep;
+  const previous = !playing && s.stepIndex > 0 ? s.combination.steps[s.stepIndex - 1] : null;
   const display = step.display ?? {};
   const m = useMemo(() => (display.distance ? measure(s.combination, step) : null), [display.distance, s.combination, step]);
   const hud = useRef<HTMLDivElement>(null);
@@ -93,8 +100,8 @@ export function Stage() {
         {FENCERS.map((f) => (
           <Mannequin
             key={f}
-            label={f}
-            active={s.active === f}
+            label={s.showLabels ? f : undefined}
+            active={s.active === f && !playing}
             setup={s.combination.fencers[f]}
             pose={step.poses[f]}
             heading={HEADING[f]}
@@ -120,10 +127,12 @@ export function Stage() {
         {m && <ReadoutLines m={m} />}
         {s.selected && <MotionGuides guides={guides} active={recent} />}
         {dialSide && <ThumbDial rig={activeRig} side={dialSide} weapon={dialSide === weaponSide} />}
-        {s.handles && !s.selected && (
+        {s.handles && !s.selected && !playing && (
           <Handles setup={s.combination.fencers[s.active]} pose={step.poses[s.active]} heading={HEADING[s.active]} />
         )}
-        <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} enabled={!s.cameraLocked} />
+        <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} enabled={!s.cameraLocked && !playing} />
+        {playing && <Ticker onTick={s.tickPreview} />}
+        {playing && <CameraDriver view={frame?.camera ?? viewFor('side', step)} />}
         <CameraRig flight={s.flight} onView={s.setStepCamera} />
         <FitRig request={s.fitRequest} points={fitPoints} onView={s.requestView} />
         <HudTracker anchor={selectedPoint} avoid={hudAvoid} el={hud} leader={leader} />
@@ -134,49 +143,54 @@ export function Stage() {
       </svg>
       <JointHud el={hud} />
 
-      <div className="stage-tools" role="toolbar" aria-label="View">
-        {(Object.keys(VIEW_NAMES) as ViewName[]).map((v) => (
-          <button key={v} onClick={() => s.requestView(viewFor(v, step))} disabled={s.cameraLocked}>
-            {VIEW_NAMES[v]}
+      <div className="stage-tools" aria-hidden={playing || undefined}>
+        <div className="tool-group" role="toolbar" aria-label="Camera">
+          <span className="group-label">Camera</span>
+          {(Object.keys(VIEW_NAMES) as ViewName[]).map((v) => (
+            <button key={v} onClick={() => s.requestView(viewFor(v, step))} disabled={s.cameraLocked || playing}>
+              {VIEW_NAMES[v]}
+            </button>
+          ))}
+          <span className="divider" />
+          <button onClick={() => s.requestFit('both')} disabled={s.cameraLocked || playing} title="Zoom so both fencers fill the view (Z)">
+            Zoom to both
           </button>
-        ))}
-        <button onClick={() => s.requestFit('both')} disabled={s.cameraLocked} title="Zoom so both fencers fill the view (Z)">
-          Zoom to both
-        </button>
-        <button
-          onClick={() => s.requestFit(s.active)}
-          disabled={s.cameraLocked}
-          title={`Zoom in on fencer ${s.active}, the one you are posing (Shift+Z)`}
-        >
-          Zoom to {s.active}
-        </button>
-        <span className="divider" />
-        <button
-          aria-pressed={s.cameraLocked}
-          onClick={s.toggleCameraLock}
-          title="Lock the camera so it cannot be moved by accident (L)"
-        >
-          {s.cameraLocked ? '🔒 View locked' : '🔓 Lock view'}
-        </button>
-        <button
-          onClick={s.useViewForAllSteps}
-          disabled={!step.camera || s.combination.steps.length < 2}
-          title="Give every step this view, so the shot stays the same throughout"
-        >
-          Same view for all steps
-        </button>
-        <span className="divider" />
-        <button aria-pressed={!!display.distance} onClick={() => s.setDisplay({ distance: !display.distance })}>
-          Distance
-        </button>
-        <button
-          aria-pressed={!!display.ghost}
-          disabled={!previous}
-          title={previous ? 'Show the previous step faintly' : 'The first step has nothing before it'}
-          onClick={() => s.setDisplay({ ghost: !display.ghost })}
-        >
-          Ghost
-        </button>
+          <button
+            onClick={() => s.requestFit(s.active)}
+            disabled={s.cameraLocked || playing}
+            title={`Zoom in on fencer ${s.active}, the one you are posing (Shift+Z)`}
+          >
+            Zoom to {s.active}
+          </button>
+          <span className="divider" />
+          <Switch on={s.cameraLocked} onToggle={s.toggleCameraLock} title="When on, the camera cannot be moved by accident (L)">
+            Lock
+          </Switch>
+          <Switch
+            on={!!s.combination.sharedView}
+            onToggle={s.toggleSharedView}
+            title="When on, every step uses this one view: moving the camera on any step moves it for all"
+          >
+            One view for all steps
+          </Switch>
+        </div>
+        <div className="tool-group" role="toolbar" aria-label="Show">
+          <span className="group-label">Show</span>
+          <Switch on={!!display.distance} onToggle={() => s.setDisplay({ distance: !display.distance })} disabled={playing} title="Distances for this step">
+            Distance
+          </Switch>
+          <Switch
+            on={!!display.ghost}
+            onToggle={() => s.setDisplay({ ghost: !display.ghost })}
+            disabled={!previous && !display.ghost}
+            title={s.stepIndex > 0 ? 'Show the previous step faintly, for this step' : 'The first step has nothing before it'}
+          >
+            Ghost
+          </Switch>
+          <Switch on={s.showLabels} onToggle={s.toggleLabels} title="The A and B tags above the fencers">
+            Labels
+          </Switch>
+        </div>
       </div>
 
       {m && (
