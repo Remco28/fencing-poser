@@ -35,8 +35,11 @@ function tracer(rig: Rig, joint: JointName): Vector3 {
       return jointPosition(rig, joint.endsWith('_r') ? 'wrist_r' : 'wrist_l');
     case 'wrist_r':
     case 'wrist_l':
-      // The thumb tip: it circles as the hand turns, and swings as it bends.
-      return at(joint, [0.04 * H, -rig.layout.fist * 0.9, 0]);
+      // The fingertips; for the weapon hand, a point a little way down the
+      // blade, so the bends draw long, well separated paths.
+      return weaponWrist(rig, joint)
+        ? rig.guard.clone().add(rig.tip.clone().sub(rig.guard).setLength(0.3))
+        : at(joint, [0, -rig.layout.hand, 0]);
     case 'hip_r':
     case 'hip_l':
     case 'knee_r':
@@ -50,7 +53,15 @@ function tracer(rig: Rig, joint: JointName): Vector3 {
   }
 }
 
-export interface Guide {
+export /** Is this the wrist holding the épée? (Its grip frame starts at that wrist.) */
+function weaponWrist(rig: Rig, joint: JointName): boolean {
+  return jointPosition(rig, joint).distanceTo(new Vector3().setFromMatrixPosition(rig.world.grip)) < 1e-6;
+}
+
+/** Turning the hand is shown by the thumb clock instead of a path. */
+const SHOWN_ON_DIAL = new Set(['wrist_r.pronate', 'wrist_l.pronate']);
+
+interface Guide {
   points: Vector3[];
   /** Index of the point nearest the current angle. */
   current: number;
@@ -58,7 +69,8 @@ export interface Guide {
 }
 
 export function guidesFor(setup: FencerSetup, pose: Pose, heading: number, joint: JointName): Guide[] {
-  return JOINT_BY_NAME[joint].dofs.map((d, dofIndex) => {
+  return JOINT_BY_NAME[joint].dofs.flatMap((d, dofIndex) => {
+    if (SHOWN_ON_DIAL.has(`${joint}.${d.key}`)) return [];
     const now = angle(pose, joint, d.key);
     const lo = clampDof(joint, d.key, now - SPAN);
     const hi = clampDof(joint, d.key, now + SPAN);
@@ -69,7 +81,7 @@ export function guidesFor(setup: FencerSetup, pose: Pose, heading: number, joint
       points.push(tracer(solveRig(setup, p, heading), joint));
     }
     const current = hi > lo ? Math.round(((now - lo) / (hi - lo)) * SAMPLES) : 0;
-    return { points, current, dofIndex };
+    return [{ points, current, dofIndex }];
   });
 }
 
@@ -115,8 +127,12 @@ export function MotionGuides({ guides, active }: { guides: Guide[]; /** The move
         const color = GUIDE_COLORS[g.dofIndex];
         const strong = active === g.dofIndex;
         const [down, up] = NUDGE_KEYS[g.dofIndex].map((keys) => keys[0].toUpperCase());
-        const moves = g.points[0].distanceTo(g.points[g.points.length - 1]) > 0.01;
-        if (!moves) return null;
+        const first = g.points[0];
+        const last = g.points[g.points.length - 1];
+        const length = g.points.reduce((sum, p, i) => (i ? sum + p.distanceTo(g.points[i - 1]) : 0), 0);
+        if (length < 0.01) return null;
+        // Key tags sit just beyond the ends, and only on paths long enough to keep them apart.
+        const beyond = (end: Vector3, inner: Vector3) => end.clone().add(end.clone().sub(inner).setLength(0.035));
         return (
           <group key={g.dofIndex}>
             <Line
@@ -132,8 +148,12 @@ export function MotionGuides({ guides, active }: { guides: Guide[]; /** The move
               <sphereGeometry args={[0.012, 12, 10]} />
               <meshBasicMaterial color={color} depthTest={false} transparent opacity={0.9} />
             </mesh>
-            <KeyTag text={down} color={color} position={g.points[0]} strong={strong} />
-            <KeyTag text={up} color={color} position={g.points[g.points.length - 1]} strong={strong} />
+            {length > 0.08 && (
+              <>
+                <KeyTag text={down} color={color} position={beyond(first, g.points[1])} strong={strong} />
+                <KeyTag text={up} color={color} position={beyond(last, g.points[g.points.length - 2])} strong={strong} />
+              </>
+            )}
           </group>
         );
       })}

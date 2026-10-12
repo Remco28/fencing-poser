@@ -109,7 +109,8 @@ interface EditorState extends Snapshot {
   requestView: (camera: StepCamera) => void;
   setDisplay: (change: Partial<StepDisplay>) => void;
   toggleTarget: (fencer: FencerId, area: TargetArea) => void;
-  setSetup: (change: Partial<FencerSetup>) => void;
+  /** Change a fencer's height, build, hand or grip (the active fencer unless named). */
+  setSetup: (change: Partial<FencerSetup>, fencer?: FencerId) => void;
   setUnits: (units: Units) => void;
   undo: () => void;
   redo: () => void;
@@ -334,19 +335,21 @@ export const useEditor = create<EditorState>((set, get) => {
           }),
         }),
       ),
-    setSetup: (change) =>
+    setSetup: (change, fencer) =>
       set((s) => {
-        const setup = { ...activeSetup(s), ...change };
-        let combination: Combination = { ...s.combination, fencers: { ...s.combination.fencers, [s.active]: setup } };
-        if (setup.handedness === activeSetup(s).handedness) {
-          return edit(s, { combination }, `${s.active}.setup.${Object.keys(change).join(',')}`);
+        const f = fencer ?? s.active;
+        const before = s.combination.fencers[f];
+        const setup = { ...before, ...change };
+        let combination: Combination = { ...s.combination, fencers: { ...s.combination.fencers, [f]: setup } };
+        if (setup.handedness === before.handedness) {
+          return edit(s, { combination }, `${f}.setup.${Object.keys(change).join(',')}`);
         }
         // Switching hands mirrors this fencer in every step, so the weapon arm keeps its pose.
         combination = withSteps(
           combination,
-          combination.steps.map((step) => ({ ...step, poses: { ...step.poses, [s.active]: mirrorPose(step.poses[s.active]) } })),
+          combination.steps.map((step) => ({ ...step, poses: { ...step.poses, [f]: mirrorPose(step.poses[f]) } })),
         );
-        return { ...edit(s, { combination }), selected: s.selected && oppositeJoint(s.selected) };
+        return { ...edit(s, { combination }), selected: f === s.active && s.selected ? oppositeJoint(s.selected) : s.selected };
       }),
     setUnits: (units) => set({ units }),
 

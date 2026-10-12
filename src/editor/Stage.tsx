@@ -37,6 +37,7 @@ export function Stage() {
   const display = step.display ?? {};
   const m = useMemo(() => (display.distance ? measure(s.combination, step) : null), [display.distance, s.combination, step]);
   const hud = useRef<HTMLDivElement>(null);
+  const leader = useRef<SVGLineElement>(null);
   const recent = useRecentNudge(s.lastNudge);
 
   const activeRig = useMemo(
@@ -56,10 +57,17 @@ export function Stage() {
     () => (s.selected ? guidesFor(s.combination.fencers[s.active], step.poses[s.active], HEADING[s.active], s.selected) : []),
     [s.selected, s.active, s.combination.fencers, step],
   );
-  // The controls keep clear of the joint and of its guides.
-  const hudPoints = useMemo(
-    () => (selectedPoint ? [selectedPoint, ...guides.flatMap((g) => [g.points[0], g.points[g.points.length - 1]])] : []),
-    [selectedPoint, guides],
+  // The controls keep clear of the whole fencer being posed and of the guides.
+  const hudAvoid = useMemo(
+    () =>
+      selectedPoint
+        ? [
+            ...JOINT_NAMES.map((j) => jointPosition(activeRig, j)),
+            jointPosition(activeRig, 'neck').add(new Vector3(0, 0.17 * activeRig.layout.height, 0)),
+            ...guides.flatMap((g) => [g.points[0], g.points[g.points.length - 1]]),
+          ]
+        : [],
+    [selectedPoint, guides, activeRig],
   );
 
   /** Everything to keep in frame: every joint, the head and the point. */
@@ -112,15 +120,18 @@ export function Stage() {
         {m && <ReadoutLines m={m} />}
         {s.selected && <MotionGuides guides={guides} active={recent} />}
         {dialSide && <ThumbDial rig={activeRig} side={dialSide} weapon={dialSide === weaponSide} />}
-        {s.handles && (
+        {s.handles && !s.selected && (
           <Handles setup={s.combination.fencers[s.active]} pose={step.poses[s.active]} heading={HEADING[s.active]} />
         )}
         <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} enabled={!s.cameraLocked} />
         <CameraRig flight={s.flight} onView={s.setStepCamera} />
         <FitRig request={s.fitRequest} points={fitPoints} onView={s.requestView} />
-        <HudTracker points={hudPoints} el={hud} />
+        <HudTracker anchor={selectedPoint} avoid={hudAvoid} el={hud} leader={leader} />
       </Canvas>
 
+      <svg className="hud-leader" aria-hidden>
+        <line ref={leader} />
+      </svg>
       <JointHud el={hud} />
 
       <div className="stage-tools" role="toolbar" aria-label="View">
@@ -129,11 +140,15 @@ export function Stage() {
             {VIEW_NAMES[v]}
           </button>
         ))}
-        <button onClick={() => s.requestFit('both')} disabled={s.cameraLocked} title="Frame both fencers (Z)">
-          Fit both
+        <button onClick={() => s.requestFit('both')} disabled={s.cameraLocked} title="Zoom so both fencers fill the view (Z)">
+          Zoom to both
         </button>
-        <button onClick={() => s.requestFit(s.active)} disabled={s.cameraLocked} title="Frame the fencer you are posing (Shift+Z)">
-          Fit {s.active}
+        <button
+          onClick={() => s.requestFit(s.active)}
+          disabled={s.cameraLocked}
+          title={`Zoom in on fencer ${s.active}, the one you are posing (Shift+Z)`}
+        >
+          Zoom to {s.active}
         </button>
         <span className="divider" />
         <button

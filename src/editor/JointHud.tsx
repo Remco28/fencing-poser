@@ -9,38 +9,63 @@ import { NUDGE_KEYS, STEP } from './keyboard.ts';
 import { GUIDE_COLORS } from './MotionGuides.tsx';
 import { activePose, useEditor } from './store.ts';
 
-/** Gap between the joint and the controls, in pixels. */
-const GAP = 28;
+/** Gap between the fencer and the controls, in pixels. */
+const GAP = 24;
 
 /**
- * Inside the canvas: keeps the controls next to the selected joint as the
- * camera moves, writing straight to the element's style each frame rather
- * than re-rendering React.
+ * Inside the canvas: keeps the controls beside the fencer being posed, clear
+ * of their body and of the joint's guides, with a thin line to the joint.
+ * Writes straight to the elements' styles each frame rather than
+ * re-rendering React.
  */
-export function HudTracker({ points, el }: { points: Vector3[]; el: RefObject<HTMLDivElement | null> }) {
+export function HudTracker(props: {
+  anchor: Vector3 | null;
+  avoid: Vector3[];
+  el: RefObject<HTMLDivElement | null>;
+  leader: RefObject<SVGLineElement | null>;
+}) {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   useFrame(() => {
-    const box = el.current;
+    const box = props.el.current;
+    const line = props.leader.current;
     if (!box) return;
-    // points[0] is the joint; the rest are the ends of its guides.
-    const screen = points
-      .map((p) => p.clone().project(camera))
-      .filter((n) => n.z <= 1)
-      .map((n) => ({ x: ((n.x + 1) / 2) * size.width, y: ((1 - n.y) / 2) * size.height }));
-    if (!screen.length) {
+    const toScreen = (p: Vector3) => {
+      const n = p.clone().project(camera);
+      return n.z > 1 ? null : { x: ((n.x + 1) / 2) * size.width, y: ((1 - n.y) / 2) * size.height };
+    };
+    const joint = props.anchor && toScreen(props.anchor);
+    if (!joint) {
       box.style.visibility = 'hidden';
+      line?.setAttribute('visibility', 'hidden');
       return;
     }
-    const minX = Math.min(...screen.map((p) => p.x));
-    const maxX = Math.max(...screen.map((p) => p.x));
+    const screen = props.avoid.map(toScreen).filter((p): p is { x: number; y: number } => !!p);
+    const minX = Math.min(joint.x, ...screen.map((p) => p.x));
+    const maxX = Math.max(joint.x, ...screen.map((p) => p.x));
     const w = box.offsetWidth;
     const h = box.offsetHeight;
-    // To the right of the joint and its guides, or to the left if there is no room; always inside the stage.
-    const left = maxX + GAP + w < size.width - 8 ? maxX + GAP : Math.max(8, minX - GAP - w);
-    const top = Math.min(Math.max(64, screen[0].y - h / 2), size.height - h - 90);
+    // Beside the fencer on whichever side has room, nearer the joint's side first.
+    const rightRoom = size.width - 12 - (maxX + GAP + w);
+    const leftRoom = minX - GAP - w - 12;
+    const preferRight = joint.x - minX > maxX - joint.x;
+    let left: number;
+    if (preferRight ? rightRoom >= 0 : leftRoom < 0 && rightRoom >= 0) left = maxX + GAP;
+    else if (leftRoom >= 0) left = minX - GAP - w;
+    else left = rightRoom > leftRoom ? size.width - w - 12 : 12;
+    const top = Math.min(Math.max(64, joint.y - h / 2), size.height - h - 90);
     box.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
     box.style.visibility = 'visible';
+    if (line) {
+      // From the nearer edge of the controls to the joint.
+      const edgeX = left + w / 2 < joint.x ? left + w : left;
+      const edgeY = Math.min(Math.max(joint.y, top + 16), top + h - 16);
+      line.setAttribute('x1', String(edgeX));
+      line.setAttribute('y1', String(edgeY));
+      line.setAttribute('x2', String(joint.x));
+      line.setAttribute('y2', String(joint.y));
+      line.setAttribute('visibility', 'visible');
+    }
   });
   return null;
 }
