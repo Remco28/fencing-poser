@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FENCERS } from '../model/combination.ts';
+import { FENCERS, TARGET_NAMES, type TargetArea } from '../model/combination.ts';
 import { GROUP_NAMES, type PresetGroup } from '../presets/builtin.ts';
 import { JOINT_BY_NAME, JOINTS, type JointName } from '../model/joints.ts';
 import { angle } from '../model/types.ts';
@@ -77,6 +77,22 @@ export function Panel({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           value={step.notes}
           onChange={(e) => s.setStepText({ notes: e.target.value })}
         />
+        <h3>Highlight a target</h3>
+        {FENCERS.map((f) => (
+          <div key={f} className="target-row">
+            <span>{f}</span>
+            <div className="buttons">
+              {(Object.keys(TARGET_NAMES) as TargetArea[]).map((area) => {
+                const on = step.display?.targets?.some((t) => t.fencer === f && t.area === area) ?? false;
+                return (
+                  <button key={area} className="small" aria-pressed={on} onClick={() => s.toggleTarget(f, area)}>
+                    {TARGET_NAMES[area]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </section>
 
       <section>
@@ -251,7 +267,8 @@ export function Panel({ onOpenLibrary }: { onOpenLibrary: () => void }) {
 }
 
 function Presets() {
-  const { presets, applyPreset, saveCurrentAsPreset, updatePreset, renamePreset, removePreset } = useEditor();
+  const { presets, applyPreset, saveCurrentAsPreset, updatePreset, renamePreset, removePreset, presetPart, setPresetPart } =
+    useEditor();
   const [editing, setEditing] = useState(false);
   const [naming, setNaming] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -270,6 +287,18 @@ function Presets() {
         </button>
       </div>
 
+      {!editing && (
+        <Toggle
+          label="Apply to"
+          value={presetPart}
+          options={[
+            ['all', 'Whole body'],
+            ['upper', 'Upper'],
+            ['lower', 'Legs'],
+          ]}
+          onChange={setPresetPart}
+        />
+      )}
       {!editing &&
         (Object.keys(GROUP_NAMES) as PresetGroup[]).map((group) => {
           const inGroup = presets.filter((p) => (p.builtIn ? (p.group ?? 'footwork') : 'mine') === group);

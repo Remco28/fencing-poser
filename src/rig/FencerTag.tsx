@@ -31,13 +31,14 @@ export function FencerTag(props: { text: string; active: boolean; position: [num
   return (
     <sprite
       position={props.position}
-      scale={[0.16, 0.16, 1]}
+      // A fixed size on screen, however near or far the camera is.
+      scale={[0.045, 0.045, 1]}
       onPointerDown={(e) => {
         e.stopPropagation();
         props.onClick?.();
       }}
     >
-      <spriteMaterial map={texture} depthTest={false} transparent />
+      <spriteMaterial map={texture} depthTest={false} transparent sizeAttenuation={false} />
     </sprite>
   );
 }

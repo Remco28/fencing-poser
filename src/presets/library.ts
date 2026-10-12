@@ -1,3 +1,4 @@
+import { JOINT_NAMES, type JointName } from '../model/joints.ts';
 import { mirrorPose } from '../model/mirror.ts';
 import type { Handedness, Pose } from '../model/types.ts';
 import { BUILT_IN_PRESETS, type PresetPose } from './builtin.ts';
@@ -29,10 +30,28 @@ export function presetPoseFrom(pose: Pose, handedness: Handedness): Pose {
   return { root: { x: 0, z: 0, lift: shaped.root.lift }, joints: shaped.joints };
 }
 
-/** The pose a preset gives this fencer, keeping where they stand. */
-export function poseFromPreset(preset: PresetPose, handedness: Handedness, current: Pose): Pose {
+const UPPER: JointName[] = ['abdomen', 'chest', 'neck', 'shoulder_r', 'elbow_r', 'wrist_r', 'shoulder_l', 'elbow_l', 'wrist_l', 'grip'];
+
+/**
+ * The pose a preset gives this fencer, keeping where they stand. `part` takes
+ * only the upper body (spine, head, arms, grip) or only the legs and hips
+ * from the preset, keeping the rest of the current pose.
+ */
+export function poseFromPreset(
+  preset: PresetPose,
+  handedness: Handedness,
+  current: Pose,
+  part: 'all' | 'upper' | 'lower' = 'all',
+): Pose {
   const shaped = handedness === 'left' ? mirrorPose(preset.pose) : preset.pose;
-  return { joints: shaped.joints, root: { ...current.root, lift: shaped.root.lift } };
+  if (part === 'all') return { joints: shaped.joints, root: { ...current.root, lift: shaped.root.lift } };
+  const joints = { ...current.joints };
+  for (const name of JOINT_NAMES) {
+    if (UPPER.includes(name) !== (part === 'upper')) continue;
+    if (shaped.joints[name]) joints[name] = shaped.joints[name];
+    else delete joints[name];
+  }
+  return { joints, root: current.root };
 }
 
 export function upsert(saved: PresetPose[], preset: PresetPose): PresetPose[] {

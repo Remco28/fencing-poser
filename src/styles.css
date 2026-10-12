@@ -488,3 +488,84 @@ button.small {
 .dot.hips {
   background: #7a3ae0;
 }
+
+.stage-tools {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  background: #ffffffe6;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.stage-tools button {
+  font-size: 13px;
+  padding: 4px 9px;
+}
+
+.stage-tools button[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.stage-tools .divider {
+  width: 1px;
+  background: var(--line);
+}
+
+.readouts {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  margin: 0;
+  padding: 8px 12px;
+  background: #ffffffe6;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 12px;
+}
+
+.readouts div {
+  display: contents;
+}
+
+.readouts dt {
+  color: var(--muted);
+}
+
+.readouts dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.readouts dd.touch {
+  color: #d0263a;
+}
+
+.target-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.target-row > span {
+  font-weight: 700;
+  width: 14px;
+}
+
+button.small[aria-pressed='true'] {
+  background: #d23c3c;
+  border-color: #d23c3c;
+  color: #fff;
+}

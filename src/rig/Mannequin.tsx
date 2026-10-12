@@ -1,7 +1,7 @@
 import { RoundedBox } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
-import { createContext, use, useMemo, useState, type ReactNode } from 'react';
-import type { Matrix4 } from 'three';
+import { createContext, use, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { Group, Matrix4, Mesh, MeshStandardMaterial } from 'three';
 import type { JointName } from '../model/joints.ts';
 import type { FencerSetup, Pose } from '../model/types.ts';
 import { Epee } from './Epee.tsx';
@@ -12,6 +12,7 @@ import type { Layout } from './layout.ts';
 const WOOD = '#d9b68c';
 const WOOD_JOINT = '#b98c5f';
 const SELECTED = '#e0703a';
+const TARGET = '#d23c3c';
 const HOVER = '#ecc9a0';
 
 interface Props {
@@ -25,9 +26,13 @@ interface Props {
   /** The fencer being posed; its tag is highlighted. */
   active?: boolean;
   onActivate?: () => void;
+  /** Parts to show as the target of the action. */
+  targets?: JointName[];
+  /** A faint, unclickable copy (the previous step, behind this one). */
+  ghost?: boolean;
 }
 
-export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect, label, active = false, onActivate }: Props) {
+export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect, label, active = false, onActivate, targets = [], ghost = false }: Props) {
   const rig = useMemo(() => solveRig(setup, pose, heading), [setup, pose, heading]);
   const [hovered, setHovered] = useState<JointName | null>(null);
   const L = rig.layout;
@@ -41,7 +46,7 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect,
       joint={joint}
       ball={(BALLS[joint] ?? 0) * H * (joint.startsWith('wrist') ? 1 : b)}
       matrix={rig.world[joint]}
-      color={joint === selected ? SELECTED : joint === hovered ? HOVER : WOOD}
+      color={joint === selected ? SELECTED : targets.includes(joint) ? TARGET : joint === hovered ? HOVER : WOOD}
       onSelect={onSelect}
       onHover={setHovered}
     >
@@ -70,10 +75,26 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect,
   ]);
 
   const head = jointPosition(rig, 'neck');
+  const root = useRef<Group>(null);
+
+  // A ghost is see-through, casts no shadow and cannot be clicked.
+  useLayoutEffect(() => {
+    if (!ghost || !root.current) return;
+    root.current.traverse((o) => {
+      const mesh = o as Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = false;
+      mesh.raycast = () => {};
+      const m = mesh.material as MeshStandardMaterial;
+      m.transparent = true;
+      m.opacity = 0.18;
+      m.depthWrite = false;
+    });
+  });
 
   return (
-    <group>
-      {label && (
+    <group ref={root}>
+      {label && !ghost && (
         <FencerTag text={label} active={active} position={[head.x, head.y + 0.28 * H, head.z]} onClick={onActivate} />
       )}
       {part('pelvis', <Ellipsoid position={[0, -0.005 * H, 0]} radii={[0.07 * H, 0.055 * H, 0.1 * H * b]} />)}

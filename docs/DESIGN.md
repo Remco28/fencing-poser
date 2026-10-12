@@ -414,9 +414,9 @@ Each milestone ends with something the coach can try.
 
 | # | Milestone | Done when |
 |---|---|---|
-| **M1** | **One mannequin** | A sized, wooden-style fencer with an épée stands in the scene. Every joint can be rotated within limits. Orbit camera. Height adjustable. |
-| **M2** | **Two fencers, piste, steps** | To-scale piste. Fencers A and B. Built-in presets plus save-as-preset. Steps with labels and notes. New step copies the previous one. Prev/Next. Undo/redo. Library saved in the browser plus file export/import. |
-| **M3** | **Fast posing and teaching views** | IK handles (hand, point, feet, pelvis, chest). Camera presets plus saved camera per step. Distance readouts. Target highlights. Ghosting toggle. Partial presets. |
+| **M1** ✅ | **One mannequin** | A sized, wooden-style fencer with an épée stands in the scene. Every joint can be rotated within limits. Orbit camera. Height adjustable. |
+| **M2** ✅ | **Two fencers, piste, steps** | To-scale piste. Fencers A and B. Built-in presets plus save-as-preset. Steps with labels and notes. New step copies the previous one. Prev/Next. Undo/redo. Library saved in the browser plus file export/import. |
+| **M3** ✅ | **Fast posing and teaching views** | IK handles (hand, point, feet, pelvis, chest). Camera presets plus saved camera per step. Distance readouts. Target highlights. Ghosting toggle. Partial presets. |
 | **M4** | **Viewer and sharing** | Smooth playback with per-step duration. Read-only viewer route that works on phones. Share link + QR code. Hosted. |
 | **M5** | **Export** | PNG, PDF handout, video, GIF. |
 | Later | | Point trail polish, arrows, arm length, foil/sabre, per-limb timing offsets, hosted links (if D1 changes), desktop wrapper |

@@ -127,3 +127,13 @@ describe('presets', () => {
     expect(pose().root.x).toBe(1.5);
   });
 });
+
+describe('partial presets', () => {
+  it('takes only the arms from a preset when asked', () => {
+    const lunge = BUILT_IN_PRESETS.find((p) => p.id === 'lunge')!;
+    const legs = pose().joints.knee_r;
+    state().applyPreset(lunge, 'upper');
+    expect(pose().joints.knee_r).toEqual(legs);
+    expect(pose().joints.elbow_r).toEqual(lunge.pose.joints.elbow_r);
+  });
+});

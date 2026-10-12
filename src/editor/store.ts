@@ -29,6 +29,9 @@ import {
   type Combination,
   type FencerId,
   type Step,
+  type StepCamera,
+  type StepDisplay,
+  type TargetArea,
 } from '../model/combination.ts';
 import { clampDof, JOINT_BY_NAME, JOINTS, oppositeJoint, type JointName } from '../model/joints.ts';
 import { mirrorPose } from '../model/mirror.ts';
@@ -37,6 +40,7 @@ import type { PresetPose } from '../presets/builtin.ts';
 import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type ShownPreset } from '../presets/library.ts';
 
 export type Units = 'metric' | 'imperial';
+export type PresetPart = 'all' | 'upper' | 'lower';
 
 interface Snapshot {
   combination: Combination;
@@ -77,7 +81,20 @@ interface EditorState extends Snapshot {
   advance: (metres: number) => void;
   setPosition: (x: number) => void;
   resetJoint: (joint: JointName) => void;
-  applyPreset: (preset: PresetPose) => void;
+  /** Apply a preset to the whole body, or only the upper body or the legs. */
+  applyPreset: (preset: PresetPose, part?: PresetPart) => void;
+  presetPart: PresetPart;
+  setPresetPart: (part: PresetPart) => void;
+  /** Remember the view for the current step. Not an undoable edit. */
+  setStepCamera: (camera: StepCamera) => void;
+  /**
+   * Where the camera should fly next. Moving between steps flies to the
+   * step's saved view; choosing a view flies there and saves it to the step.
+   */
+  flight: { camera: StepCamera; id: number; save: boolean } | null;
+  requestView: (camera: StepCamera) => void;
+  setDisplay: (change: Partial<StepDisplay>) => void;
+  toggleTarget: (fencer: FencerId, area: TargetArea) => void;
   setSetup: (change: Partial<FencerSetup>) => void;
   setUnits: (units: Units) => void;
   undo: () => void;
@@ -150,6 +167,14 @@ function withPose(s: EditorState, pose: Pose): Combination {
   return withSteps(
     s.combination,
     s.combination.steps.map((step, i) => (i === s.stepIndex ? { ...step, poses: { ...step.poses, [s.active]: pose } } : step)),
+  );
+}
+
+/** The combination with the current step changed by `change`. */
+function withStep(s: Snapshot, change: (step: Step) => Step): Combination {
+  return withSteps(
+    s.combination,
+    s.combination.steps.map((step, i) => (i === s.stepIndex ? change(step) : step)),
   );
 }
 
@@ -253,9 +278,30 @@ export const useEditor = create<EditorState>((set, get) => {
         delete joints[joint];
         return edit(s, { combination: withPose(s, { ...activePose(s), joints }) });
       }),
-    applyPreset: (preset) =>
+    applyPreset: (preset, part = get().presetPart) =>
       set((s) =>
-        edit(s, { combination: withPose(s, poseFromPreset(preset, activeSetup(s).handedness, activePose(s))) }),
+        edit(s, { combination: withPose(s, poseFromPreset(preset, activeSetup(s).handedness, activePose(s), part)) }),
+      ),
+    presetPart: 'all',
+    setPresetPart: (presetPart) => set({ presetPart }),
+    setStepCamera: (camera) =>
+      set((s) => ({
+        combination: { ...withStep(s, (step) => ({ ...step, camera })), updatedAt: new Date().toISOString() },
+      })),
+    flight: null,
+    requestView: (camera) => set((s) => ({ flight: { camera, id: (s.flight?.id ?? 0) + 1, save: true } })),
+    setDisplay: (change) =>
+      set((s) => edit(s, { combination: withStep(s, (step) => ({ ...step, display: { ...step.display, ...change } })) })),
+    toggleTarget: (fencer, area) =>
+      set((s) =>
+        edit(s, {
+          combination: withStep(s, (step) => {
+            const targets = step.display?.targets ?? [];
+            const on = targets.some((t) => t.fencer === fencer && t.area === area);
+            const next = on ? targets.filter((t) => !(t.fencer === fencer && t.area === area)) : [...targets, { fencer, area }];
+            return { ...step, display: { ...step.display, targets: next } };
+          }),
+        }),
       ),
     setSetup: (change) =>
       set((s) => {
@@ -320,16 +366,7 @@ export const useEditor = create<EditorState>((set, get) => {
       }),
     setStepText: (change) =>
       set((s) =>
-        edit(
-          s,
-          {
-            combination: withSteps(
-              s.combination,
-              s.combination.steps.map((step, i) => (i === s.stepIndex ? { ...step, ...change } : step)),
-            ),
-          },
-          `text.${s.stepIndex}.${Object.keys(change).join(',')}`,
-        ),
+        edit(s, { combination: withStep(s, (step) => ({ ...step, ...change })) }, `text.${s.stepIndex}.${Object.keys(change).join(',')}`),
       ),
     setTitle: (title) => set((s) => edit(s, { combination: { ...s.combination, title } }, 'title')),
 
@@ -456,3 +493,11 @@ async function writeLibraryToFolder() {
   const folder = useEditor.getState().folder;
   if (!ok && folder?.ready) useEditor.setState({ folder: { ...folder, ready: false } });
 }
+
+// Any change of step (navigating, undo, opening a combination) flies the
+// camera to that step's saved view, if it has one.
+useEditor.subscribe((s, prev) => {
+  const step = currentStep(s);
+  if (step.id === currentStep(prev).id || !step.camera) return;
+  useEditor.setState({ flight: { camera: step.camera, id: (s.flight?.id ?? 0) + 1, save: false } });
+});
