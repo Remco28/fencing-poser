@@ -82,8 +82,9 @@ export function mergeLibrary(
   return { presets, combinations, presetsChanged, added, updated, keptNewer };
 }
 
-export function download(filename: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+export function download(filename: string, content: string | Blob) {
+  const blob = typeof content === 'string' ? new Blob([content], { type: 'application/json' }) : content;
+  const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), { href: url, download: filename });
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);

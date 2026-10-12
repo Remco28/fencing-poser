@@ -1,13 +1,66 @@
 import QRCode from 'qrcode';
 import { useEffect, useRef, useState } from 'react';
+import { download, libraryFile } from '../library/backup.ts';
 import { appAddress, encodeCombination } from '../share/link.ts';
+import { keySteps } from '../viewer/player.ts';
 import { useEditor } from './store.ts';
+
+function slug(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'combination';
+}
 
 /** Above this, a QR code gets too dense to scan reliably from a screen. */
 const QR_LIMIT = 2200;
 
 export function ShareDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const combination = useEditor((s) => s.combination);
+  const stepIndex = useEditor((s) => s.stepIndex);
+  const units = useEditor((s) => s.units);
+  const [busy, setBusy] = useState('');
+  const [speed, setSpeed] = useState(1);
+  const name = slug(combination.title);
+  const stepIsVia = !!combination.steps[stepIndex].motionOnly;
+
+  /** Run one export at a time, saying what is happening. */
+  const run = async (what: string, work: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(what);
+    try {
+      await work();
+      setBusy('');
+    } catch (error) {
+      console.error(error);
+      setBusy(`That did not work: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const exportPicture = () =>
+    run('Drawing the picture…', async () => {
+      const { captionedPicture } = await import('../export/render.tsx');
+      download(`${name}-step-${keySteps(combination).indexOf(stepIndex) + 1}.png`, await captionedPicture(combination, stepIndex, units));
+    });
+
+  const exportHandout = () =>
+    run('Making the handout…', async () => {
+      const { handoutPdf } = await import('../export/handout.ts');
+      download(`${name}-handout.pdf`, await handoutPdf(combination, units, setBusy));
+    });
+
+  const exportVideo = () =>
+    run('Recording…', async () => {
+      const { recordVideo, videoExtension } = await import('../export/render.tsx');
+      const video = await recordVideo(combination, {
+        speed,
+        units,
+        onProgress: (f) => setBusy(`Recording the playback in real time… ${Math.round(f * 100)}%`),
+      });
+      download(`${name}.${videoExtension(video)}`, video);
+    });
+
+  const exportFile = () =>
+    run('Saving…', async () => {
+      download(`${name}.fencing-poser.json`, JSON.stringify(libraryFile([], [combination]), null, 1));
+    });
   const dialog = useRef<HTMLDialogElement>(null);
   const [link, setLink] = useState('');
   const [qr, setQr] = useState('');
@@ -50,7 +103,7 @@ export function ShareDialog({ open, onClose }: { open: boolean; onClose: () => v
   return (
     <dialog ref={dialog} className="library share" onClose={onClose}>
       <div className="section-head">
-        <h2>Share “{combination.title}”</h2>
+        <h2>Share and export “{combination.title}”</h2>
         <button className="link" onClick={onClose}>
           Close
         </button>
@@ -84,6 +137,34 @@ export function ShareDialog({ open, onClose }: { open: boolean; onClose: () => v
       ) : (
         link && <p className="hint">This combination is too long for a QR code. Send the link instead.</p>
       )}
+
+      <h3 className="export-head">Export</h3>
+      <div className="export-grid">
+        <button onClick={() => void exportPicture()} disabled={!!busy || stepIsVia}>
+          <strong>This step as a picture</strong>
+          <span>{stepIsVia ? 'Not for a motion-only step' : 'PNG with the label, notes and distances'}</span>
+        </button>
+        <button onClick={() => void exportHandout()} disabled={!!busy}>
+          <strong>Handout</strong>
+          <span>PDF: every step with its picture and notes, ready to print</span>
+        </button>
+        <button onClick={() => void exportVideo()} disabled={!!busy}>
+          <strong>Video</strong>
+          <span>Smooth playback, recorded in real time</span>
+        </button>
+        <button onClick={() => void exportFile()} disabled={!!busy}>
+          <strong>Combination file</strong>
+          <span>To keep, or to open in another browser through Library → Import</span>
+        </button>
+      </div>
+      <label className="inline">
+        <span>Video speed</span>
+        <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} disabled={!!busy}>
+          <option value={0.5}>Half speed</option>
+          <option value={1}>Full speed</option>
+        </select>
+      </label>
+      {busy && <p className="message">{busy}</p>}
     </dialog>
   );
 }

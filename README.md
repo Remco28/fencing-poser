@@ -6,7 +6,7 @@ Pose two 3D fencers on a to-scale piste, save each moment of an action as a labe
 
 Built for épée first.
 
-**Status:** milestones 1–4 done: the editor (posing, presets, steps, library, drag-to-pose, views, readouts) and the student viewer with share links. Next: export (PNG, PDF handout, video). See the [milestones](docs/DESIGN.md#14-milestones).
+**Status:** milestones 1–5 done: editor, student viewer with share links, and export (picture, PDF handout, video, combination file). Hosting on GitHub Pages is next. See the [milestones](docs/DESIGN.md#14-milestones).
 
 - [Design spec](docs/DESIGN.md): what we are building, why, and in what order.
 

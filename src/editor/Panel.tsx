@@ -25,7 +25,7 @@ export function Panel({ onOpenLibrary, onShare }: { onOpenLibrary: () => void; o
             onChange={(e) => s.setTitle(e.target.value)}
           />
           <button onClick={onOpenLibrary}>Library</button>
-          <button className="primary" onClick={onShare}>
+          <button className="primary" onClick={onShare} title="Share with students, or export a picture, handout or video">
             Share
           </button>
         </div>
