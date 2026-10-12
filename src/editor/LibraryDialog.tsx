@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { folderSyncAvailable, FOLDER_FILE } from '../library/folder.ts';
 import { useEditor } from './store.ts';
 
 export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -33,9 +34,10 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
         </button>
       </div>
       <p className="hint">
-        Everything is saved in this browser automatically. Export a backup file now and then: clearing browser data
-        would erase the library.
+        Everything is saved in this browser automatically. Clearing browser data would erase it, so keep a copy: save
+        to a folder, or export a backup file now and then.
       </p>
+      <FolderSync onMessage={setMessage} />
       <div className="buttons">
         <button onClick={() => close(s.createCombination)}>New combination</button>
         <button onClick={() => close(s.duplicateCombination)}>Duplicate this one</button>
@@ -81,5 +83,48 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
         ))}
       </ul>
     </dialog>
+  );
+}
+
+function FolderSync({ onMessage }: { onMessage: (message: string) => void }) {
+  const s = useEditor();
+  if (!folderSyncAvailable()) {
+    return (
+      <p className="hint">
+        Saving to a folder needs Chrome or Edge. In Brave, turn on <code>brave://flags/#file-system-access-api</code>{' '}
+        first.
+      </p>
+    );
+  }
+  return (
+    <div className="folder">
+      {!s.folder && (
+        <>
+          <button onClick={async () => onMessage(await s.connectFolder())}>Save to a folder…</button>
+          <span className="hint">
+            Keeps <code>{FOLDER_FILE}</code> up to date in a folder you choose.
+          </span>
+        </>
+      )}
+      {s.folder?.ready && (
+        <>
+          <span>
+            Saving to the folder <strong>{s.folder.name}</strong>
+          </span>
+          <button className="quiet" onClick={() => void s.disconnectFolder()}>
+            Stop
+          </button>
+        </>
+      )}
+      {s.folder && !s.folder.ready && (
+        <>
+          <button onClick={async () => onMessage(await s.reconnectFolder())}>Reconnect “{s.folder.name}”</button>
+          <span className="hint">The browser needs your OK to use the folder again.</span>
+          <button className="quiet" onClick={() => void s.disconnectFolder()}>
+            Forget it
+          </button>
+        </>
+      )}
+    </div>
   );
 }

@@ -31,4 +31,14 @@ describe('library backup', () => {
     expect(take.combinations).toEqual([newer]);
     expect(take.updated).toBe(1);
   });
+
+  it('takes the newer copy of a preset', () => {
+    const pose = { root: { x: 0, z: 0, lift: 0 }, joints: {} };
+    const mine = { id: 'p', name: 'mine', builtIn: false, pose, updatedAt: '2026-10-10T00:00:00.000Z' };
+    const theirsOld = { ...mine, name: 'old', updatedAt: '2026-10-01T00:00:00.000Z' };
+    const theirsNew = { ...mine, name: 'new', updatedAt: '2026-10-11T00:00:00.000Z' };
+    expect(mergeLibrary(libraryFile([theirsOld], []), [mine], []).presetsChanged).toBe(false);
+    const merged = mergeLibrary(libraryFile([theirsNew], []), [mine], []);
+    expect(merged.presets.map((p) => p.name)).toEqual(['new']);
+  });
 });

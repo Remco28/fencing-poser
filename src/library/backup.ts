@@ -36,6 +36,8 @@ export interface MergeResult {
   presets: PresetPose[];
   /** Combinations to write: new ones, and ones the file has a newer version of. */
   combinations: Combination[];
+  /** Whether any preset came from the file. */
+  presetsChanged: boolean;
   added: number;
   updated: number;
   keptNewer: number;
@@ -43,8 +45,8 @@ export interface MergeResult {
 
 /**
  * Merging never throws away newer work: a combination in the file replaces
- * the one here only if the file's copy was changed more recently. Presets in
- * the file are added; one with the same id as a preset here is left alone.
+ * the one here only if the file's copy was changed more recently, and the
+ * same goes for presets.
  */
 export function mergeLibrary(
   file: LibraryFile,
@@ -68,9 +70,16 @@ export function mergeLibrary(
       keptNewer++;
     }
   }
-  const presetIds = new Set(localPresets.map((p) => p.id));
-  const presets = [...localPresets, ...file.presets.filter((p) => !presetIds.has(p.id))];
-  return { presets, combinations, added, updated, keptNewer };
+  const presets = [...localPresets];
+  let presetsChanged = false;
+  for (const p of file.presets) {
+    const i = presets.findIndex((q) => q.id === p.id);
+    if (i < 0) presets.push(p);
+    else if ((p.updatedAt ?? '') > (presets[i].updatedAt ?? '')) presets[i] = p;
+    else continue;
+    presetsChanged = true;
+  }
+  return { presets, combinations, presetsChanged, added, updated, keptNewer };
 }
 
 export function download(filename: string, text: string) {

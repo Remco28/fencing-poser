@@ -6,6 +6,8 @@ export interface PresetPose {
   builtIn: boolean;
   /** Authored right-handed, facing +X; mirrored when applied to a left-hander. */
   pose: Pose;
+  /** When the coach last changed it; built-ins as shipped have none. */
+  updatedAt?: string;
 }
 
 const origin = { x: 0, z: 0, lift: 0 };

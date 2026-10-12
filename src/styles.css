@@ -426,3 +426,29 @@ dialog.library h2 {
   font-size: 12px;
   color: var(--muted);
 }
+
+.save-state {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.folder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.folder .hint {
+  margin: 0;
+}
+
+code {
+  font: 12px ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  background: var(--control);
+  padding: 1px 4px;
+  border-radius: 4px;
+}

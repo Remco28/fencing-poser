@@ -36,6 +36,17 @@ export function Panel({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           />
           <button onClick={onOpenLibrary}>Library</button>
         </div>
+        <p className="save-state">
+          {s.folder?.ready ? (
+            <>Saved in this browser and the folder “{s.folder.name}”</>
+          ) : s.folder ? (
+            <button className="link" onClick={onOpenLibrary}>
+              Folder “{s.folder.name}” needs reconnecting
+            </button>
+          ) : (
+            <>Saved in this browser</>
+          )}
+        </p>
         <div className="buttons">
           <button onClick={s.undo} disabled={!s.past.length} title="Ctrl+Z">
             Undo

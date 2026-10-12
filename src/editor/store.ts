@@ -1,5 +1,15 @@
 import { create } from 'zustand';
-import { download, libraryFile, mergeLibrary, parseLibraryFile } from '../library/backup.ts';
+import { download, libraryFile, mergeLibrary, parseLibraryFile, type LibraryFile } from '../library/backup.ts';
+import {
+  chooseFolder,
+  folderStatus,
+  folderSyncAvailable,
+  forgetFolder,
+  readFolder,
+  reconnectFolder,
+  writeFolder,
+  type FolderStatus,
+} from '../library/folder.ts';
 import {
   deleteCombination,
   lastOpenId,
@@ -48,6 +58,8 @@ interface EditorState extends Snapshot {
   library: LibraryEntry[];
   /** False until the last-open combination has been read from storage. */
   loaded: boolean;
+  /** The folder the library is mirrored to, if any. */
+  folder: FolderStatus;
 
   select: (joint: JointName | null, fencer?: FencerId) => void;
   setActive: (fencer: FencerId) => void;
@@ -81,6 +93,9 @@ interface EditorState extends Snapshot {
   removeCombination: (id: string) => Promise<void>;
   exportLibrary: () => Promise<void>;
   importLibrary: (text: string) => Promise<string>;
+  connectFolder: () => Promise<string>;
+  reconnectFolder: () => Promise<string>;
+  disconnectFolder: () => Promise<void>;
 
   saveCurrentAsPreset: (name: string) => void;
   updatePreset: (id: string) => void;
@@ -149,7 +164,33 @@ export const useEditor = create<EditorState>((set, get) => {
   /** Update saved presets in memory and in the browser's storage. */
   const storePresets = (savedPresets: PresetPose[]) => {
     set({ savedPresets, presets: shownPresets(savedPresets) });
-    void savePresets(savedPresets);
+    void savePresets(savedPresets).then(scheduleFolderWrite);
+  };
+
+  /** Merge a library file into this browser. Returns what happened, in words. */
+  const mergeIn = async (file: LibraryFile): Promise<string> => {
+    await saveCombination(get().combination);
+    const merged = mergeLibrary(file, get().savedPresets, await listCombinations());
+    for (const c of merged.combinations) await saveCombination(c);
+    if (merged.presetsChanged) {
+      set({ savedPresets: merged.presets, presets: shownPresets(merged.presets) });
+      await savePresets(merged.presets);
+    }
+    const open = merged.combinations.find((c) => c.id === get().combination.id);
+    if (open) set(fresh(open));
+    await get().refreshLibrary();
+    const parts = [`${merged.added} added`, `${merged.updated} updated`];
+    if (merged.keptNewer) parts.push(`${merged.keptNewer} kept because yours were newer`);
+    return parts.join(', ');
+  };
+
+  /** Read the folder's library into this browser, then write the result back. */
+  const syncFolder = async (): Promise<string> => {
+    const text = await readFolder();
+    const file = text ? parseLibraryFile(text) : null;
+    const message = file ? await mergeIn(file) : '';
+    await writeLibraryToFolder();
+    return message;
   };
 
   const first = newCombination();
@@ -167,6 +208,7 @@ export const useEditor = create<EditorState>((set, get) => {
     presets: shownPresets([]),
     library: [],
     loaded: false,
+    folder: null,
 
     select: (selected, fencer) => set((s) => ({ selected, active: fencer ?? s.active })),
     setActive: (active) => set({ active }),
@@ -283,10 +325,11 @@ export const useEditor = create<EditorState>((set, get) => {
     setTitle: (title) => set((s) => edit(s, { combination: { ...s.combination, title } }, 'title')),
 
     start: async () => {
-      const [savedPresets, lastId] = await Promise.all([loadPresets(), lastOpenId()]);
+      const [savedPresets, lastId, folder] = await Promise.all([loadPresets(), lastOpenId(), folderStatus()]);
       const last = lastId ? await loadCombination(lastId) : null;
-      set({ savedPresets, presets: shownPresets(savedPresets), ...(last && fresh(last)), loaded: true });
+      set({ savedPresets, presets: shownPresets(savedPresets), ...(last && fresh(last)), loaded: true, folder });
       await get().refreshLibrary();
+      if (folder?.ready) await syncFolder();
     },
     refreshLibrary: async () => {
       const all = await listCombinations();
@@ -322,21 +365,39 @@ export const useEditor = create<EditorState>((set, get) => {
     importLibrary: async (text) => {
       const file = parseLibraryFile(text);
       if (!file) return 'That file is not a Fencing Poser library.';
-      await saveCombination(get().combination);
-      const merged = mergeLibrary(file, get().savedPresets, await listCombinations());
-      for (const c of merged.combinations) await saveCombination(c);
-      storePresets(merged.presets);
-      const open = merged.combinations.find((c) => c.id === get().combination.id);
-      if (open) set(fresh(open));
-      await get().refreshLibrary();
-      const parts = [`${merged.added} added`, `${merged.updated} updated`];
-      if (merged.keptNewer) parts.push(`${merged.keptNewer} kept because yours were newer`);
-      return `Imported: ${parts.join(', ')}.`;
+      const message = `Imported: ${await mergeIn(file)}.`;
+      scheduleFolderWrite();
+      return message;
+    },
+    connectFolder: async () => {
+      if (!folderSyncAvailable()) return 'This browser cannot save to a folder. Use Export backup instead.';
+      const folder = await chooseFolder();
+      if (!folder) return '';
+      set({ folder });
+      const merged = await syncFolder();
+      return `Saving to the folder “${folder.name}”.${merged ? ` From the folder: ${merged}.` : ''}`;
+    },
+    reconnectFolder: async () => {
+      const folder = await reconnectFolder();
+      set({ folder });
+      if (!folder?.ready) return 'The browser did not allow access to the folder.';
+      const merged = await syncFolder();
+      return `Reconnected to “${folder.name}”.${merged ? ` From the folder: ${merged}.` : ''}`;
+    },
+    disconnectFolder: async () => {
+      await forgetFolder();
+      set({ folder: null });
     },
 
     saveCurrentAsPreset: (name) => {
       const s = get();
-      const preset = { id: newPresetId(name), name, builtIn: false, pose: presetPoseFrom(activePose(s), activeSetup(s).handedness) };
+      const preset = {
+        id: newPresetId(name),
+        name,
+        builtIn: false,
+        pose: presetPoseFrom(activePose(s), activeSetup(s).handedness),
+        updatedAt: new Date().toISOString(),
+      };
       storePresets([...s.savedPresets, preset]);
     },
     updatePreset: (id) => {
@@ -344,14 +405,15 @@ export const useEditor = create<EditorState>((set, get) => {
       const shown = s.presets.find((p) => p.id === id);
       if (!shown) return;
       const { modified: _, ...preset } = shown;
-      storePresets(upsert(s.savedPresets, { ...preset, pose: presetPoseFrom(activePose(s), activeSetup(s).handedness) }));
+      const pose = presetPoseFrom(activePose(s), activeSetup(s).handedness);
+      storePresets(upsert(s.savedPresets, { ...preset, pose, updatedAt: new Date().toISOString() }));
     },
     renamePreset: (id, name) => {
       const { savedPresets, presets } = get();
       const shown = presets.find((p) => p.id === id);
       if (!shown || !name.trim()) return;
       const { modified: _, ...preset } = shown;
-      storePresets(upsert(savedPresets, { ...preset, name: name.trim() }));
+      storePresets(upsert(savedPresets, { ...preset, name: name.trim(), updatedAt: new Date().toISOString() }));
     },
     removePreset: (id) => storePresets(get().savedPresets.filter((p) => p.id !== id)),
   };
@@ -365,6 +427,23 @@ useEditor.subscribe((s, prev) => {
   if (!s.loaded || !edited) return;
   clearTimeout(timer);
   timer = setTimeout(() => {
-    void saveCombination(useEditor.getState().combination).then(() => useEditor.getState().refreshLibrary());
+    void saveCombination(useEditor.getState().combination).then(() => {
+      void useEditor.getState().refreshLibrary();
+      scheduleFolderWrite();
+    });
   }, 400);
 });
+
+// Folder mirror: rewrite the whole library file shortly after anything is saved.
+let folderTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleFolderWrite() {
+  if (!useEditor.getState().folder?.ready) return;
+  clearTimeout(folderTimer);
+  folderTimer = setTimeout(() => void writeLibraryToFolder(), 800);
+}
+
+async function writeLibraryToFolder() {
+  const ok = await writeFolder(JSON.stringify(libraryFile(useEditor.getState().savedPresets, await listCombinations()), null, 1));
+  const folder = useEditor.getState().folder;
+  if (!ok && folder?.ready) useEditor.setState({ folder: { ...folder, ready: false } });
+}
