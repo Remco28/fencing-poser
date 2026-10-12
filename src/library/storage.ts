@@ -17,8 +17,13 @@ export interface SavedPresets {
 export interface LibraryEntry {
   id: string;
   title: string;
+  collection: string;
   steps: number;
   updatedAt: string;
+  /** Step labels in order, to show what a combination is at a glance. */
+  labels: string[];
+  /** Everything searchable, lower-cased: title, collection, labels and notes. */
+  text: string;
 }
 
 const COMBO = 'combo:';
@@ -88,5 +93,14 @@ export function listCombinations(): Promise<Combination[]> {
 }
 
 export function toEntry(c: Combination): LibraryEntry {
-  return { id: c.id, title: c.title, steps: c.steps.length, updatedAt: c.updatedAt };
+  const labels = c.steps.filter((s) => !s.motionOnly && s.label).map((s) => s.label);
+  return {
+    id: c.id,
+    title: c.title,
+    collection: c.collection ?? '',
+    steps: c.steps.filter((s) => !s.motionOnly).length,
+    updatedAt: c.updatedAt,
+    labels,
+    text: [c.title, c.collection ?? '', ...c.steps.flatMap((s) => [s.label, s.notes])].join(' ').toLowerCase(),
+  };
 }

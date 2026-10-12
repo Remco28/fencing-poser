@@ -13,6 +13,9 @@ type Permission = 'granted' | 'denied' | 'prompt';
 interface DirectoryHandle {
   name: string;
   getFileHandle(name: string, options?: { create?: boolean }): Promise<FileHandle>;
+  getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<DirectoryHandle>;
+  keys(): AsyncIterable<string>;
+  removeEntry(name: string): Promise<void>;
   queryPermission(options: { mode: 'readwrite' }): Promise<Permission>;
   requestPermission(options: { mode: 'readwrite' }): Promise<Permission>;
 }
@@ -104,5 +107,32 @@ export async function writeFolder(text: string): Promise<boolean> {
   } catch (error) {
     console.warn('Could not write the library folder', error);
     return false;
+  }
+}
+
+/** Days of snapshots kept in the folder's backups/ subfolder. */
+export const SNAPSHOT_DAYS = 14;
+
+/**
+ * Keep a copy of the library per day in backups/, so a bad edit or a bad
+ * import can always be undone from a file. Today's copy is overwritten as
+ * the day goes on; copies beyond the last SNAPSHOT_DAYS days are removed.
+ */
+export async function writeFolderSnapshot(text: string, today = new Date()): Promise<void> {
+  const handle = await stored();
+  if (!handle) return;
+  try {
+    if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') return;
+    const backups = await handle.getDirectoryHandle('backups', { create: true });
+    const name = `fencing-poser-library-${today.toISOString().slice(0, 10)}.json`;
+    const writable = await (await backups.getFileHandle(name, { create: true })).createWritable();
+    await writable.write(text);
+    await writable.close();
+    const snapshots: string[] = [];
+    for await (const key of backups.keys()) if (/^fencing-poser-library-\d{4}-\d{2}-\d{2}\.json$/.test(key)) snapshots.push(key);
+    snapshots.sort();
+    for (const old of snapshots.slice(0, Math.max(0, snapshots.length - SNAPSHOT_DAYS))) await backups.removeEntry(old);
+  } catch (error) {
+    console.warn('Could not write the daily backup', error);
   }
 }

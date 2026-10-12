@@ -78,6 +78,8 @@ export interface Combination {
   schemaVersion: 1;
   id: string;
   title: string;
+  /** The collection it is filed under in the library ("Beginners", "Second intention"); none = unfiled. */
+  collection?: string;
   fencers: Record<FencerId, FencerSetup>;
   steps: Step[];
   createdAt: string;

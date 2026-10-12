@@ -9,6 +9,7 @@ import {
   readFolder,
   reconnectFolder,
   writeFolder,
+  writeFolderSnapshot,
   type FolderStatus,
 } from '../library/folder.ts';
 import {
@@ -129,7 +130,10 @@ interface EditorState extends Snapshot {
   createCombination: () => void;
   duplicateCombination: () => void;
   removeCombination: (id: string) => Promise<void>;
-  exportLibrary: () => Promise<void>;
+  /** Export everything (combinations and poses), or only the chosen combinations. */
+  exportLibrary: (ids?: string[]) => Promise<void>;
+  /** File a combination under a collection; '' leaves it unfiled. */
+  setCollection: (id: string, collection: string) => Promise<void>;
   importLibrary: (text: string) => Promise<string>;
   connectFolder: () => Promise<string>;
   reconnectFolder: () => Promise<string>;
@@ -438,10 +442,30 @@ export const useEditor = create<EditorState>((set, get) => {
       if (get().combination.id === id) set(fresh(newCombination()));
       await get().refreshLibrary();
     },
-    exportLibrary: async () => {
+    exportLibrary: async (ids) => {
       await saveCombination(get().combination);
-      const file = libraryFile(get().savedPresets, await listCombinations());
-      download(`fencing-poser-library-${file.exportedAt.slice(0, 10)}.json`, JSON.stringify(file, null, 1));
+      const all = await listCombinations();
+      const chosen = ids ? all.filter((c) => ids.includes(c.id)) : all;
+      // A chosen few travel without the poses; a whole-library backup carries everything.
+      const file = libraryFile(ids ? [] : get().savedPresets, chosen);
+      const name = ids
+        ? `fencing-poser-${chosen.length === 1 ? chosen[0].title.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `${chosen.length}-combinations`}`
+        : 'fencing-poser-library';
+      download(`${name}-${file.exportedAt.slice(0, 10)}.json`, JSON.stringify(file, null, 1));
+    },
+    setCollection: async (id, collection) => {
+      const name = collection.trim();
+      if (get().combination.id === id) {
+        set((s) => edit(s, { combination: { ...s.combination, collection: name || undefined } }));
+        return;
+      }
+      const c = await loadCombination(id);
+      if (!c) return;
+      await saveCombination({ ...c, collection: name || undefined, updatedAt: new Date().toISOString() });
+      // Saving another combination marks it last-open; keep the open one as last-open.
+      await saveCombination(get().combination);
+      await get().refreshLibrary();
+      scheduleFolderWrite();
     },
     importLibrary: async (text) => {
       const file = parseLibraryFile(text);
@@ -524,7 +548,9 @@ function scheduleFolderWrite() {
 }
 
 async function writeLibraryToFolder() {
-  const ok = await writeFolder(JSON.stringify(libraryFile(useEditor.getState().savedPresets, await listCombinations()), null, 1));
+  const text = JSON.stringify(libraryFile(useEditor.getState().savedPresets, await listCombinations()), null, 1);
+  const ok = await writeFolder(text);
+  if (ok) await writeFolderSnapshot(text);
   const folder = useEditor.getState().folder;
   if (!ok && folder?.ready) useEditor.setState({ folder: { ...folder, ready: false } });
 }

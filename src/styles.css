@@ -1164,3 +1164,96 @@ button.danger,
   font-size: 13px;
   padding: 5px 6px;
 }
+
+dialog.wide-dialog {
+  width: min(860px, calc(100vw - 32px));
+}
+
+.library-filters {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.library-filters input {
+  margin: 0;
+}
+
+.library-filters select {
+  width: auto;
+}
+
+.collection-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.collection-chips button {
+  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.collection-chips button.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-top: 8px;
+  background: #fff4ee;
+  border: 1px solid #f0c9b3;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.library-list .labels {
+  color: var(--ink) !important;
+  font-size: 13px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 480px;
+}
+
+.library-list .badge {
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--control);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.library-list li > input[type='checkbox'] {
+  margin: 0 4px;
+}
+
+.move-to {
+  display: flex;
+  gap: 4px;
+}
+
+.move-to input {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  width: 170px;
+}
+
+button.danger-solid {
+  background: #b42318;
+  border-color: #b42318;
+  color: #fff;
+}
