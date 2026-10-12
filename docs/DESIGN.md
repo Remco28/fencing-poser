@@ -1,6 +1,6 @@
 # Fencing Poser: Design Spec
 
-Status: **draft, pending final decisions** (see [Open decisions](#13-open-decisions)).
+Status: **draft, D5–D6 pending** (see [Open decisions](#13-open-decisions)).
 Last updated: 2026-10-12
 
 ---
@@ -220,11 +220,24 @@ Each step already stores every joint angle, so the app can calculate all the in-
 - Per-step duration, so a quick disengage and a slow preparation can have different timing
 - Easing, so motion starts and stops naturally instead of robotically
 
+**How the motion is calculated, and where it goes wrong.** The in-betweens interpolate **joint angles**, not the épée point's position. Turning the wrist or shoulder therefore moves the point along a curve on its own; it never travels in a straight line through space. But the app only knows the start and end poses, so it takes the most direct rotation between them. It does not know that a disengage has to go **under** the opponent's blade. With only two steps ("blade on the 4 side" → "blade on the 6 side"), the point would sweep straight across and pass through the opponent's blade.
+
+**The fix: via steps.** The coach adds **one** extra pose in the middle of the move ("point under the blade"), not 30 frames. Motion then goes start → via → end and follows the real path. A via step:
+
+- is made the same way as any step (copy the previous one, drag the point down)
+- is marked **"motion only"**, so it is skipped in Prev/Next stepping and in the PDF handout. Students stepping through still see the clean three-step story.
+- costs about 15 seconds to author
+
+Most actions need no via step: an extension, lunge, retreat or simple parry already moves along the right path. Via steps are only needed where the path matters: disengages, circular parries, coupés, and the hand-before-foot timing of a lunge.
+
 **Known limits, accepted:**
 
-- In-betweens are mathematically smooth, not biomechanically correct. A real lunge has the hand leading the foot; plain interpolation moves everything at once. The fix is authoring: add an extra step ("arm extends" before "lunge lands"). A per-limb timing offset can come later if it is needed.
-- Blades and bodies can pass through each other mid-motion. There is no collision. A small extra step fixes it when it matters.
-- Feet may glide during an advance instead of lifting. Mid-step presets avoid this.
+- In-betweens are mathematically smooth, not biomechanically correct. A real lunge has the hand leading the foot; plain interpolation moves everything at once. The fix is a via step ("arm extended, feet still"). A per-limb timing offset can come later if it is needed.
+- There is no collision. Blades and bodies can pass through each other where the coach has not added a via step.
+- Feet may glide during an advance instead of lifting. A via step or a mid-step preset avoids this.
+- Smooth playback is an optional extra. Discrete stepping never depends on it, and a combination with no via steps still steps perfectly.
+
+**Later idea (not planned):** an automatic "go under / go over the blade" choice per step that generates the via pose. Only worth building if via steps prove tedious in practice.
 
 **Effort:** discrete stepping is the foundation. Smooth playback reuses the same data and adds roughly a few days of work on top, so it is cheap. It is scheduled right after discrete stepping works.
 
@@ -318,6 +331,7 @@ interface Step {
   camera: { position: Vec3; target: Vec3; fov: number };
   display: { ghost: boolean; targets: TargetArea[]; readouts: Readout[]; trail: boolean };
   durationMs?: number;       // time to move into this step when playing
+  motionOnly?: boolean;      // via step: shapes smooth playback, hidden from stepping and handouts
 }
 
 interface Combination {
@@ -367,12 +381,8 @@ To settle before building. Recommendations are marked ★.
 
 | # | Question | Options | Status |
 |---|---|---|---|
-| D1 | How do students get combinations? | ★ Link contains the data (no server; snapshot links) · Hosted backend (short, revocable links; needs a server) | open |
-| D2 | Figure look | ★ Wooden mannequin · Fencing whites + mask · Both, toggleable | open |
-| D3 | Default épée grip | French · ★ Pistol · Both selectable (default pistol) | open |
-| D4 | Units for height and distance | Metric · Imperial · ★ Selectable | open |
-| D5 | Where the app is hosted | ★ Cloudflare Pages (free with a private repo) · GitHub Pages (needs a paid plan for a private repo) · Local only for now | open |
-| D6 | Smooth playback in v1? | ★ Yes, right after discrete stepping (milestone 4) · Later | proposed |
+| D5 | Where the app is hosted | ★ Cloudflare Pages (free with a private repo) · GitHub Pages (needs a paid plan for a private repo) · Local only for now | proposed; needed by M4 |
+| D6 | Smooth playback in v1? | ★ Yes, in M4, with "motion only" via steps for curved paths (see 9.2) · Later | open: coach questioned blade paths |
 | D7 | Red/green fencer accents | ★ Optional, off by default | proposed |
 
 ### Decided
@@ -386,6 +396,10 @@ To settle before building. Recommendations are marked ★.
 | Saved camera per step | Parries and distance need different viewpoints |
 | Private library, no coach-to-coach sharing | Competitive advantage |
 | Private GitHub repo | Same reason |
+| Students get combinations through links that hold the data (D1) | No server, nothing stored online. Snapshot links are acceptable. |
+| Wooden-mannequin look (D2) | Clean and neutral, with joints visible for posing |
+| Pistol grip by default, French selectable per fencer (D3) | The most common grip in modern épée |
+| Units selectable, metric or imperial (D4) | The piste is metric; heights are often thought of in feet and inches |
 
 ---
 
