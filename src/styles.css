@@ -1409,3 +1409,16 @@ button.switch.on .knob {
 .step-chip .menu > button:disabled {
   opacity: 0.4;
 }
+
+.blade-row {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.blade-row > span {
+  color: var(--muted);
+}

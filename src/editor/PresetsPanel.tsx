@@ -70,7 +70,8 @@ export function PresetsPanel() {
 
 function PresetButton(props: { preset: ShownPreset; open: boolean; onMenu: (open: boolean) => void; onApply: () => void }) {
   const { preset: p } = props;
-  const { updatePreset, renamePreset, removePreset, active } = useEditor();
+  const { updatePreset, renamePreset, removePreset, applyPresetToOther, active } = useEditor();
+  const opp = active === 'A' ? 'B' : 'A';
   const [mode, setMode] = useState<'menu' | 'replace' | 'rename' | 'delete'>('menu');
   const box = useRef<HTMLDivElement>(null);
   // The menu opens below the chip, kept on screen.
@@ -136,6 +137,15 @@ function PresetButton(props: { preset: ShownPreset; open: boolean; onMenu: (open
         <div className="menu" role="menu" style={{ left: at.left, top: at.top }}>
           {mode === 'menu' && (
             <>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  applyPresetToOther(p);
+                  close();
+                }}
+              >
+                Apply to {opp}
+              </button>
               <button role="menuitem" onClick={() => setMode('replace')}>
                 Replace with {active}’s current pose
               </button>

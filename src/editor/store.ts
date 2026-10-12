@@ -40,6 +40,7 @@ import { mirrorPose } from '../model/mirror.ts';
 import { angle, type FencerSetup, type Pose } from '../model/types.ts';
 import type { PresetPose } from '../presets/builtin.ts';
 import { advance, keyAt } from '../viewer/player.ts';
+import { engage, pushBlades, touch } from '../ik/blades.ts';
 import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type ShownPreset } from '../presets/library.ts';
 
 export type PresetPart = 'all' | 'upper' | 'lower';
@@ -105,6 +106,12 @@ interface EditorState extends Snapshot {
   advance: (metres: number) => void;
   setPosition: (x: number) => void;
   resetJoint: (joint: JointName) => void;
+  /** Apply a preset to the other fencer, without switching to them. */
+  applyPresetToOther: (preset: PresetPose) => void;
+  /** The posing fencer lays their blade against the opponent's, in sixte or quarte. */
+  engageBlades: (line: 'sixte' | 'quarte') => void;
+  /** Bring the posing fencer's point onto a target; returns how far short it fell (0 if it landed). */
+  touchTarget: (area: TargetArea) => number;
   /** Apply a preset to the whole body, or only the upper body or the legs. */
   applyPreset: (preset: PresetPose, part?: PresetPart) => void;
   presetPart: PresetPart;
@@ -215,6 +222,13 @@ function withStep(s: Snapshot, change: (step: Step) => Step): Combination {
   );
 }
 
+/** The active fencer's new pose, with the other blade pushed aside if the blades meet. */
+function moved(s: EditorState, pose: Pose): Combination {
+  const step = currentStep(s);
+  const after = pushBlades(s.combination, step.poses, { ...step.poses, [s.active]: pose }, s.active);
+  return withStep(s, (st) => ({ ...st, poses: after }));
+}
+
 function withAngle(pose: Pose, joint: JointName, dof: string, value: number): Pose {
   return {
     ...pose,
@@ -288,14 +302,14 @@ export const useEditor = create<EditorState>((set, get) => {
     selectOpposite: () => set(({ selected }) => ({ selected: selected && oppositeJoint(selected) })),
 
     setAngle: (joint, dof, value) =>
-      set((s) => edit(s, { combination: withPose(s, withAngle(activePose(s), joint, dof, value)) }, `${s.active}.${joint}.${dof}`)),
+      set((s) => edit(s, { combination: moved(s, withAngle(activePose(s), joint, dof, value)) }, `${s.active}.${joint}.${dof}`)),
     nudge: (dofIndex, delta) =>
       set((s) => {
         const dof = s.selected && JOINT_BY_NAME[s.selected].dofs[dofIndex];
         if (!s.selected || !dof) return {};
         const pose = withAngle(activePose(s), s.selected, dof.key, angle(activePose(s), s.selected, dof.key) + delta);
         return {
-          ...edit(s, { combination: withPose(s, pose) }, `${s.active}.${s.selected}.${dof.key}`),
+          ...edit(s, { combination: moved(s, pose) }, `${s.active}.${s.selected}.${dof.key}`),
           lastNudge: { dofIndex, id: (s.lastNudge?.id ?? 0) + 1 },
         };
       }),
@@ -339,7 +353,7 @@ export const useEditor = create<EditorState>((set, get) => {
       }),
     fitRequest: null,
     requestFit: (who) => set((s) => ({ fitRequest: { who, id: (s.fitRequest?.id ?? 0) + 1 } })),
-    dragPose: (pose, dragId) => set((s) => edit(s, { combination: withPose(s, pose) }, `drag.${dragId}`)),
+    dragPose: (pose, dragId) => set((s) => edit(s, { combination: moved(s, pose) }, `drag.${dragId}`)),
     handles: true,
     toggleHandles: () => set((s) => ({ handles: !s.handles })),
     advance: (metres) => {
@@ -350,7 +364,7 @@ export const useEditor = create<EditorState>((set, get) => {
       set((s) => {
         const pose = activePose(s);
         const root = { ...pose.root, x: Math.max(-PISTE_HALF, Math.min(PISTE_HALF, x)) };
-        return edit(s, { combination: withPose(s, { ...pose, root }) }, `${s.active}.position`);
+        return edit(s, { combination: moved(s, { ...pose, root }) }, `${s.active}.position`);
       }),
     resetJoint: (joint) =>
       set((s) => {
@@ -360,8 +374,26 @@ export const useEditor = create<EditorState>((set, get) => {
       }),
     applyPreset: (preset, part = get().presetPart) =>
       set((s) =>
-        edit(s, { combination: withPose(s, poseFromPreset(preset, activeSetup(s).handedness, activePose(s), part)) }),
+        edit(s, { combination: moved(s, poseFromPreset(preset, activeSetup(s).handedness, activePose(s), part)) }),
       ),
+    applyPresetToOther: (preset) =>
+      set((s) => {
+        const f: FencerId = s.active === 'A' ? 'B' : 'A';
+        const step = currentStep(s);
+        const pose = poseFromPreset(preset, s.combination.fencers[f].handedness, step.poses[f], s.presetPart);
+        const after = pushBlades(s.combination, step.poses, { ...step.poses, [f]: pose }, f);
+        return edit(s, { combination: withStep(s, (st) => ({ ...st, poses: after })) });
+      }),
+    engageBlades: (line) =>
+      set((s) => edit(s, { combination: withStep(s, (st) => ({ ...st, poses: engage(s.combination, st.poses, s.active, line) })) })),
+    touchTarget: (area) => {
+      const s = get();
+      const before = currentStep(s).poses;
+      const result = touch(s.combination, before, s.active, area);
+      const poses = pushBlades(s.combination, before, result.poses, s.active);
+      set(edit(s, { combination: withStep(s, (st) => ({ ...st, poses })) }));
+      return result.short;
+    },
     presetPart: 'all',
     setPresetPart: (presetPart) => set({ presetPart }),
     setStepCamera: (camera) =>

@@ -111,6 +111,7 @@ function PoseTab() {
         </p>
         <PresetsPanel />
       </section>
+      <BladesSection />
       <section>
         <h2>Joint</h2>
         <select value={s.selected ?? ''} onChange={(e) => s.select((e.target.value || null) as JointName | null)}>
@@ -169,6 +170,53 @@ function PoseTab() {
         </label>
       </section>
     </>
+  );
+}
+
+function BladesSection() {
+  const s = useEditor();
+  const [message, setMessage] = useState('');
+  const opp = s.active === 'A' ? 'B' : 'A';
+  return (
+    <section>
+      <h2>Blades</h2>
+      <div className="blade-row">
+        <span>{s.active} engages</span>
+        <div className="buttons">
+          <button className="small" onClick={() => s.engageBlades('sixte')} title={`${s.active} lays the blade on ${opp}'s, closing ${s.active}'s outside line`}>
+            in sixte
+          </button>
+          <button className="small" onClick={() => s.engageBlades('quarte')} title={`${s.active} lays the blade on ${opp}'s, closing ${s.active}'s inside line`}>
+            in quarte
+          </button>
+        </div>
+      </div>
+      <div className="blade-row">
+        <span>
+          {s.active} touches {opp} on
+        </span>
+        <div className="buttons">
+          {(Object.keys(TARGET_NAMES) as TargetArea[]).map((area) => (
+            <button
+              key={area}
+              className="small"
+              onClick={() => {
+                const short = s.touchTarget(area);
+                setMessage(
+                  short
+                    ? `${s.active}’s point is ${formatDistance(short, s.units)} short of ${opp}’s ${TARGET_NAMES[area].toLowerCase()}: step in or lunge first.`
+                    : '',
+                );
+              }}
+            >
+              {TARGET_NAMES[area]}
+            </button>
+          ))}
+        </div>
+      </div>
+      {message && <p className="message">{message}</p>}
+      <p className="hint small">When one blade is moved into the other, the other is pushed aside rather than passing through.</p>
+    </section>
   );
 }
 
