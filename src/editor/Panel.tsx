@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FENCERS } from '../model/combination.ts';
+import { GROUP_NAMES, type PresetGroup } from '../presets/builtin.ts';
 import { JOINT_BY_NAME, JOINTS, type JointName } from '../model/joints.ts';
 import { angle } from '../model/types.ts';
 import { NUDGE_LABELS, STEP } from './keyboard.ts';
@@ -263,15 +264,23 @@ function Presets() {
         </button>
       </div>
 
-      {!editing && (
-        <div className="buttons">
-          {presets.map((p) => (
-            <button key={p.id} onClick={() => applyPreset(p)}>
-              {p.name}
-            </button>
-          ))}
-        </div>
-      )}
+      {!editing &&
+        (Object.keys(GROUP_NAMES) as PresetGroup[]).map((group) => {
+          const inGroup = presets.filter((p) => (p.builtIn ? (p.group ?? 'footwork') : 'mine') === group);
+          if (!inGroup.length) return null;
+          return (
+            <div key={group} className="preset-group">
+              <h4>{GROUP_NAMES[group]}</h4>
+              <div className="buttons">
+                {inGroup.map((p) => (
+                  <button key={p.id} className="small" onClick={() => applyPreset(p)}>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
 
       {editing && (
         <ul className="preset-list">

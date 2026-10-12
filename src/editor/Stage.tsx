@@ -11,6 +11,10 @@ const VIEWS: Record<string, [number, number, number]> = {
   top: [0, 9, 0.01],
   front: [7, 1.6, 0.6],
   back: [-7, 1.6, 0.6],
+  // Close-ups of a fencer at the centre line.
+  near: [0.6, 1.3, 2.6],
+  nearback: [-2.2, 1.5, -1.2],
+  nearfront: [2.6, 1.3, 0.6],
 };
 const START = VIEWS[new URLSearchParams(location.search).get('view') ?? ''] ?? [0.6, 2.8, 8.4];
 
