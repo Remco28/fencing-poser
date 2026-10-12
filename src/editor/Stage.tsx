@@ -6,9 +6,9 @@ import { FENCERS, HEADING, targetParts } from '../model/combination.ts';
 import { Mannequin } from '../rig/Mannequin.tsx';
 import { CameraRig } from '../scene/CameraRig.tsx';
 import { measure, VIEW_NAMES, viewFor, type ViewName } from '../scene/measure.ts';
-import { Piste } from '../scene/Piste.tsx';
+import { Environment } from '../scene/Environment.tsx';
 import { ReadoutLines } from '../scene/Readouts.tsx';
-import { formatDistance } from './Panel.tsx';
+import { formatDistance } from '../model/units.ts';
 import { currentStep, useEditor } from './store.ts';
 
 // Dev aid: ?view=top|front|back|side|near|nearback|nearfront picks the start view.
@@ -38,23 +38,7 @@ export function Stage() {
         onPointerMissed={() => s.select(null)}
         gl={{ preserveDrawingBuffer: true }}
       >
-        <color attach="background" args={['#eef0f2']} />
-        <hemisphereLight args={['#ffffff', '#b9b4aa', 1.2]} />
-        <directionalLight
-          position={[2, 6, 4]}
-          intensity={2}
-          castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-camera-left={-6}
-          shadow-camera-right={6}
-          shadow-camera-top={4}
-          shadow-camera-bottom={-4}
-        />
-        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-          <planeGeometry args={[60, 60]} />
-          <meshStandardMaterial color="#dfe2e5" roughness={1} />
-        </mesh>
-        <Piste />
+        <Environment />
         {FENCERS.map((f) => (
           <Mannequin
             key={f}

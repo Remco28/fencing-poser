@@ -403,7 +403,7 @@ To settle before building. Recommendations are marked ★.
 | Wooden-mannequin look (D2) | Clean and neutral, with joints visible for posing |
 | Pistol grip by default, French selectable per fencer (D3) | The most common grip in modern épée |
 | Smooth playback in M4, with via steps, and the viewer can switch between smooth and discrete at any time (D6) | The coach wants both options |
-| Public repo, hosted on GitHub Pages (D5) | Free. Only the app code is public; combinations live in the coach's browser, exported files and share links, never in the repo. |
+| Hosting (D5): GitHub Pages or self-hosted, coach to decide | The app is static files either way. A manual Pages workflow is ready. Combinations live in the coach's browser, the library folder and share links, never in the repo. |
 | Units selectable, metric or imperial (D4) | The piste is metric; heights are often thought of in feet and inches |
 
 ---
@@ -417,7 +417,7 @@ Each milestone ends with something the coach can try.
 | **M1** ✅ | **One mannequin** | A sized, wooden-style fencer with an épée stands in the scene. Every joint can be rotated within limits. Orbit camera. Height adjustable. |
 | **M2** ✅ | **Two fencers, piste, steps** | To-scale piste. Fencers A and B. Built-in presets plus save-as-preset. Steps with labels and notes. New step copies the previous one. Prev/Next. Undo/redo. Library saved in the browser plus file export/import. |
 | **M3** ✅ | **Fast posing and teaching views** | IK handles (hand, point, feet, pelvis, chest). Camera presets plus saved camera per step. Distance readouts. Target highlights. Ghosting toggle. Partial presets. |
-| **M4** | **Viewer and sharing** | Smooth playback with per-step duration. Read-only viewer route that works on phones. Share link + QR code. Hosted. |
+| **M4** ✅ | **Viewer and sharing** | Smooth playback with per-step duration. Read-only viewer route that works on phones. Share link + QR code. Hosted. |
 | **M5** | **Export** | PNG, PDF handout, video, GIF. |
 | Later | | Point trail polish, arrows, arm length, foil/sabre, per-limb timing offsets, hosted links (if D1 changes), desktop wrapper |
 

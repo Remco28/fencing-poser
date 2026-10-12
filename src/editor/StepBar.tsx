@@ -15,12 +15,13 @@ export function StepBar() {
         {steps.map((step, i) => (
           <li key={step.id}>
             <button
-              className={i === s.stepIndex ? 'on' : ''}
+              className={[i === s.stepIndex ? 'on' : '', step.motionOnly ? 'via' : ''].join(' ')}
+              title={step.motionOnly ? 'Motion only: shapes smooth playback, skipped when stepping' : undefined}
               aria-current={i === s.stepIndex ? 'step' : undefined}
               onClick={() => s.goToStep(i)}
             >
               <span className="num">{i + 1}</span>
-              {step.label || <span className="untitled">Untitled</span>}
+              {step.label || <span className="untitled">{step.motionOnly ? 'via' : 'Untitled'}</span>}
             </button>
           </li>
         ))}

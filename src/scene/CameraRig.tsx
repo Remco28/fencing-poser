@@ -19,12 +19,33 @@ export interface Flight {
 
 const FLIGHT_SECONDS = 0.7;
 
+/** Views are framed on a wide screen; on a narrower one, pull back to keep the same width of piste in shot. */
+const REFERENCE_ASPECT = 1.3;
+
+export function fitToAspect(view: StepCamera, aspect: number): StepCamera {
+  const k = Math.min(2.6, Math.max(1, REFERENCE_ASPECT / aspect));
+  if (k === 1) return view;
+  const [tx, ty, tz] = view.target;
+  const [px, py, pz] = view.position;
+  return { target: view.target, position: [tx + (px - tx) * k, ty + (py - ty) * k, tz + (pz - tz) * k] };
+}
+
 /**
  * Glides the camera to each new flight's view, and reports the view whenever
  * the coach finishes orbiting by hand or a saving flight lands.
  */
-export function CameraRig({ flight, onView }: { flight: Flight | null; onView?: (camera: StepCamera) => void }) {
+export function CameraRig({
+  flight,
+  onView,
+  fitAspect = false,
+}: {
+  flight: Flight | null;
+  onView?: (camera: StepCamera) => void;
+  /** Pull back on narrow screens (the student viewer); the editor keeps views exact. */
+  fitAspect?: boolean;
+}) {
   const camera = useThree((s) => s.camera);
+  const aspect = useThree((s) => s.size.width / s.size.height);
   const controls = useThree((s) => s.controls) as unknown as Controls | null;
   const moving = useRef<{ fromPos: Vector3; toPos: Vector3; fromTarget: Vector3; toTarget: Vector3; t: number; save: boolean } | null>(
     null,
@@ -35,14 +56,17 @@ export function CameraRig({ flight, onView }: { flight: Flight | null; onView?: 
 
   useEffect(() => {
     if (!controls || !flight) return;
+    const view = fitAspect ? fitToAspect(flight.camera, aspect) : flight.camera;
     moving.current = {
       fromPos: camera.position.clone(),
-      toPos: new Vector3(...flight.camera.position),
+      toPos: new Vector3(...view.position),
       fromTarget: controls.target.clone(),
-      toTarget: new Vector3(...flight.camera.target),
+      toTarget: new Vector3(...view.target),
       t: 0,
       save: flight.save,
     };
+    // Refit only when a new flight starts, not on every resize.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flight, controls, camera]);
 
   useEffect(() => {

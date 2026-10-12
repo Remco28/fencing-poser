@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Units } from '../model/units.ts';
 import { download, libraryFile, mergeLibrary, parseLibraryFile, type LibraryFile } from '../library/backup.ts';
 import {
   chooseFolder,
@@ -39,8 +40,8 @@ import { angle, type FencerSetup, type Pose } from '../model/types.ts';
 import type { PresetPose } from '../presets/builtin.ts';
 import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type ShownPreset } from '../presets/library.ts';
 
-export type Units = 'metric' | 'imperial';
 export type PresetPart = 'all' | 'upper' | 'lower';
+export type { Units };
 
 interface Snapshot {
   combination: Combination;
@@ -105,6 +106,7 @@ interface EditorState extends Snapshot {
   deleteStep: () => void;
   moveStep: (by: -1 | 1) => void;
   setStepText: (change: Partial<Pick<Step, 'label' | 'notes'>>) => void;
+  setStepOptions: (change: Partial<Pick<Step, 'motionOnly' | 'durationMs'>>) => void;
   setTitle: (title: string) => void;
 
   start: () => Promise<void>;
@@ -368,6 +370,7 @@ export const useEditor = create<EditorState>((set, get) => {
       set((s) =>
         edit(s, { combination: withStep(s, (step) => ({ ...step, ...change })) }, `text.${s.stepIndex}.${Object.keys(change).join(',')}`),
       ),
+    setStepOptions: (change) => set((s) => edit(s, { combination: withStep(s, (step) => ({ ...step, ...change })) })),
     setTitle: (title) => set((s) => edit(s, { combination: { ...s.combination, title } }, 'title')),
 
     start: async () => {

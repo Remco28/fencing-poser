@@ -65,6 +65,13 @@ export interface Step {
   /** The view this step is shown from; the editor saves it as the coach looks around. */
   camera?: StepCamera;
   display?: StepDisplay;
+  /**
+   * A via step: it shapes smooth playback (the point going under the blade)
+   * but is skipped when stepping through and in handouts.
+   */
+  motionOnly?: boolean;
+  /** Smooth playback: milliseconds to move into this step from the one before. */
+  durationMs?: number;
 }
 
 export interface Combination {
@@ -115,7 +122,15 @@ export function newCombination(now = new Date()): Combination {
 export function copyStep(step: Step): Step {
   // Same view and display as the step it came from; highlighted targets belong to the step that made them.
   const { targets: _, ...display } = step.display ?? {};
-  return { id: newId('step'), label: '', notes: '', poses: structuredClone(step.poses), camera: step.camera, display };
+  return {
+    id: newId('step'),
+    label: '',
+    notes: '',
+    poses: structuredClone(step.poses),
+    camera: step.camera,
+    display,
+    durationMs: step.durationMs,
+  };
 }
 
 /** Accepts anything parsed from JSON; returns a combination or null. */

@@ -32,7 +32,7 @@ export function FencerTag(props: { text: string; active: boolean; position: [num
     <sprite
       position={props.position}
       // A fixed size on screen, however near or far the camera is.
-      scale={[0.045, 0.045, 1]}
+      scale={[0.034, 0.034, 1]}
       onPointerDown={(e) => {
         e.stopPropagation();
         props.onClick?.();

@@ -4,21 +4,10 @@ import { GROUP_NAMES, type PresetGroup } from '../presets/builtin.ts';
 import { JOINT_BY_NAME, JOINTS, type JointName } from '../model/joints.ts';
 import { angle } from '../model/types.ts';
 import { NUDGE_LABELS, STEP } from './keyboard.ts';
-import { activePose, activeSetup, currentStep, useEditor, type Units } from './store.ts';
+import { formatDistance, formatHeight } from '../model/units.ts';
+import { activePose, activeSetup, currentStep, useEditor } from './store.ts';
 
-export function formatHeight(metres: number, units: Units): string {
-  if (units === 'metric') return `${Math.round(metres * 100)} cm`;
-  const inches = Math.round(metres / 0.0254);
-  return `${Math.floor(inches / 12)}′ ${inches % 12}″`;
-}
-
-export function formatDistance(metres: number, units: Units): string {
-  if (units === 'metric') return `${metres.toFixed(2)} m`;
-  const inches = Math.round(Math.abs(metres) / 0.0254);
-  return `${metres < 0 ? '−' : ''}${Math.floor(inches / 12)}′ ${inches % 12}″`;
-}
-
-export function Panel({ onOpenLibrary }: { onOpenLibrary: () => void }) {
+export function Panel({ onOpenLibrary, onShare }: { onOpenLibrary: () => void; onShare: () => void }) {
   const s = useEditor();
   const pose = activePose(s);
   const setup = activeSetup(s);
@@ -36,6 +25,9 @@ export function Panel({ onOpenLibrary }: { onOpenLibrary: () => void }) {
             onChange={(e) => s.setTitle(e.target.value)}
           />
           <button onClick={onOpenLibrary}>Library</button>
+          <button className="primary" onClick={onShare}>
+            Share
+          </button>
         </div>
         <p className="save-state">
           {s.folder?.ready ? (
@@ -77,6 +69,31 @@ export function Panel({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           value={step.notes}
           onChange={(e) => s.setStepText({ notes: e.target.value })}
         />
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={!!step.motionOnly}
+            onChange={(e) => s.setStepOptions({ motionOnly: e.target.checked })}
+          />
+          <span>
+            Motion only: a <em>via</em> step that shapes smooth playback (the point going under the blade) and is skipped
+            when stepping through
+          </span>
+        </label>
+        <label className="inline">
+          <span>Smooth playback: move into this step in</span>
+          <select
+            value={step.durationMs ?? 1000}
+            onChange={(e) => s.setStepOptions({ durationMs: Number(e.target.value) })}
+            disabled={s.stepIndex === 0}
+          >
+            {[250, 500, 750, 1000, 1500, 2000, 3000].map((ms) => (
+              <option key={ms} value={ms}>
+                {ms / 1000} s
+              </option>
+            ))}
+          </select>
+        </label>
         <h3>Highlight a target</h3>
         {FENCERS.map((f) => (
           <div key={f} className="target-row">
