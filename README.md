@@ -6,9 +6,12 @@ Pose two 3D fencers on a to-scale piste, save each moment of an action as a labe
 
 Built for épée first.
 
-**Status:** milestones 1–5 done: editor, student viewer with share links, and export (picture, PDF handout, video, combination file). Hosting on GitHub Pages is next. See the [milestones](docs/DESIGN.md#14-milestones).
+**Live:** https://remco28.github.io/fencing-poser/
 
-- [Design spec](docs/DESIGN.md): what we are building, why, and in what order.
+- [Status](docs/STATUS.md): what is built, where it lives, what is next.
+- [Decisions](docs/DECISIONS.md): what was decided and why.
+
+- [Design spec](docs/DESIGN.md): the original plan and milestones.
 
 ## Run it
 
@@ -25,9 +28,4 @@ Presets are authored from targets rather than guessed angles: `node tools/fit-po
 
 ## Hosting
 
-The app is static files: `npm run build` puts them in `dist/`, and any web server can serve that folder (it works from any path). Share links carry the combination after the `#`, so the server never sees or stores a combination.
-
-- **GitHub Pages:** make the repository public (or use a paid plan), set Settings → Pages → Source to "GitHub Actions", then run **Publish to GitHub Pages** from the Actions tab.
-- **Self-hosting:** copy `dist/` to any static host or web server.
-
-Share links only work for students once the app is hosted somewhere they can reach.
+Published to GitHub Pages by `.github/workflows/pages.yml` on every push to `main`, after the tests pass. The app is static files (`npm run build` → `dist/`), so any web server can host it too. Share links carry the combination after the `#`, so no server ever sees or stores one.

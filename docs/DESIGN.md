@@ -1,6 +1,6 @@
 # Fencing Poser: Design Spec
 
-Status: **final for v1; build in progress** (see [Open decisions](#13-open-decisions)).
+Status: **the original plan; milestones 1–5 are built.** What exists now is in [STATUS.md](STATUS.md) and every decision since is in [DECISIONS.md](DECISIONS.md); where they differ from this document, they win.
 Last updated: 2026-10-12
 
 ---
