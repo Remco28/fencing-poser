@@ -10,6 +10,8 @@ import { FitRig } from '../scene/FitRig.tsx';
 import { jointPosition, solveRig } from '../rig/kinematics.ts';
 import { JOINT_NAMES } from '../model/joints.ts';
 import { HudTracker, JointHud } from './JointHud.tsx';
+import { guidesFor, MotionGuides, useRecentNudge } from './MotionGuides.tsx';
+import { ThumbDial } from './ThumbDial.tsx';
 import { measure, rigsFor, VIEW_NAMES, viewFor, type ViewName } from '../scene/measure.ts';
 import { Environment } from '../scene/Environment.tsx';
 import { ReadoutLines } from '../scene/Readouts.tsx';
@@ -35,13 +37,30 @@ export function Stage() {
   const display = step.display ?? {};
   const m = useMemo(() => (display.distance ? measure(s.combination, step) : null), [display.distance, s.combination, step]);
   const hud = useRef<HTMLDivElement>(null);
+  const recent = useRecentNudge(s.lastNudge);
 
+  const activeRig = useMemo(
+    () => solveRig(s.combination.fencers[s.active], step.poses[s.active], HEADING[s.active]),
+    [s.active, s.combination.fencers, step],
+  );
   // Where the selected joint is, so its controls can sit beside it.
   const selectedPoint = useMemo(() => {
     if (!s.selected) return null;
-    const rig = solveRig(s.combination.fencers[s.active], step.poses[s.active], HEADING[s.active]);
-    return s.selected === 'grip' ? rig.guard.clone() : jointPosition(rig, s.selected);
-  }, [s.selected, s.active, s.combination.fencers, step]);
+    return s.selected === 'grip' ? activeRig.guard.clone() : jointPosition(activeRig, s.selected);
+  }, [s.selected, activeRig]);
+  const weaponSide = s.combination.fencers[s.active].handedness === 'right' ? 'r' : 'l';
+  // The thumb clock shows for the weapon hand's wrist and grip, and for the other hand's wrist.
+  const dialSide = s.selected === 'grip' ? weaponSide : s.selected === 'wrist_r' ? 'r' : s.selected === 'wrist_l' ? 'l' : null;
+
+  const guides = useMemo(
+    () => (s.selected ? guidesFor(s.combination.fencers[s.active], step.poses[s.active], HEADING[s.active], s.selected) : []),
+    [s.selected, s.active, s.combination.fencers, step],
+  );
+  // The controls keep clear of the joint and of its guides.
+  const hudPoints = useMemo(
+    () => (selectedPoint ? [selectedPoint, ...guides.flatMap((g) => [g.points[0], g.points[g.points.length - 1]])] : []),
+    [selectedPoint, guides],
+  );
 
   /** Everything to keep in frame: every joint, the head and the point. */
   const fitPoints = () => {
@@ -91,13 +110,15 @@ export function Stage() {
             />
           ))}
         {m && <ReadoutLines m={m} />}
+        {s.selected && <MotionGuides guides={guides} active={recent} />}
+        {dialSide && <ThumbDial rig={activeRig} side={dialSide} weapon={dialSide === weaponSide} />}
         {s.handles && (
           <Handles setup={s.combination.fencers[s.active]} pose={step.poses[s.active]} heading={HEADING[s.active]} />
         )}
         <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} enabled={!s.cameraLocked} />
         <CameraRig flight={s.flight} onView={s.setStepCamera} />
         <FitRig request={s.fitRequest} points={fitPoints} onView={s.requestView} />
-        <HudTracker point={selectedPoint} el={hud} />
+        <HudTracker points={hudPoints} el={hud} />
       </Canvas>
 
       <JointHud el={hud} />

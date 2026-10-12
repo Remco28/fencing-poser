@@ -102,3 +102,22 @@ export function jointAxis(rig: Rig, name: JointName, local: [number, number, num
   rig.world[name].decompose(new Vector3(), q, new Vector3());
   return new Vector3(...local).applyQuaternion(q);
 }
+
+/**
+ * Where the thumb points, as a clock position seen from behind the hand
+ * looking toward the point (12 = up, 3 = to the right). Coaches describe
+ * pronation and supination this way: sixte is about 1 o'clock for a
+ * right-hander, quarte nearer 2 or 3, seconde about 9.
+ */
+export function thumbClock(rig: Rig, side: 'r' | 'l', weapon: boolean): { hour: number; degrees: number } {
+  const wrist = `wrist_${side}` as const;
+  const along = weapon ? rig.tip.clone().sub(rig.guard).normalize() : jointAxis(rig, wrist, [0, -1, 0]);
+  const up = new Vector3(0, 1, 0).addScaledVector(along, -along.y);
+  if (up.lengthSq() < 1e-6) up.set(1, 0, 0).addScaledVector(along, -along.x);
+  up.normalize();
+  const right = new Vector3().crossVectors(along, up);
+  const thumb = jointAxis(rig, wrist, [1, 0, 0]);
+  const degrees = ((Math.atan2(thumb.dot(right), thumb.dot(up)) * 180) / Math.PI + 360) % 360;
+  const hour = Math.round(degrees / 30) % 12 || 12;
+  return { hour, degrees };
+}

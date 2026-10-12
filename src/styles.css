@@ -823,6 +823,7 @@ label.inline select {
 }
 
 .hud-row {
+  border-left: 4px solid transparent;
   display: grid;
   grid-template-columns: auto auto 1fr auto auto;
   align-items: center;
@@ -914,4 +915,14 @@ label.inline select {
 
 .hud-more kbd {
   margin-left: 0;
+}
+
+.hud-clock {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 13px;
+}
+
+.hud-clock strong {
+  color: var(--accent);
 }

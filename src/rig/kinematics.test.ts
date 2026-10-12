@@ -140,3 +140,17 @@ describe('the en garde preset', () => {
     expect(rig.tip.y).toBeGreaterThan(jointPosition(rig, 'wrist_r').y);
   });
 });
+
+describe('thumb clock', () => {
+  it('reads about one o’clock for the en garde (sixte) hand', async () => {
+    const { thumbClock } = await import('./kinematics.ts');
+    const rig = solveRig(DEFAULT_SETUP, BUILT_IN_PRESETS.find((p) => p.id === 'en-garde')!.pose);
+    expect([12, 1, 2]).toContain(thumbClock(rig, 'r', true).hour);
+  });
+
+  it('turns toward nine o’clock in seconde (pronated)', async () => {
+    const { thumbClock } = await import('./kinematics.ts');
+    const rig = solveRig(DEFAULT_SETUP, BUILT_IN_PRESETS.find((p) => p.id === 'parry-2')!.pose);
+    expect([8, 9, 10]).toContain(thumbClock(rig, 'r', true).hour);
+  });
+});

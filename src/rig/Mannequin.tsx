@@ -60,13 +60,9 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect,
     part(
       `wrist_${s}`,
       s === weaponSide ? (
-        <RoundedBox args={[0.05 * H, L.fist, 0.032 * H]} radius={0.012 * H} position={[0, -L.fist / 2, 0]} castShadow>
-          <Wood />
-        </RoundedBox>
+        <Hand side={s} length={L.fist} width={0.05 * H} thick={0.032 * H} H={H} fist />
       ) : (
-        <RoundedBox args={[0.045 * H, L.hand, 0.022 * H]} radius={0.01 * H} position={[0, -L.hand / 2, 0]} castShadow>
-          <Wood />
-        </RoundedBox>
+        <Hand side={s} length={L.hand} width={0.045 * H} thick={0.022 * H} H={H} />
       ),
     ),
     part(`hip_${s}`, <Capsule length={L.thigh} radius={0.047 * H * b} />),
@@ -180,6 +176,39 @@ const ColorContext = createContext(WOOD);
 
 function Wood() {
   return <meshStandardMaterial color={use(ColorContext)} roughness={0.65} />;
+}
+
+/**
+ * A mitten with a thumb and a darker back, so the way the hand is turned
+ * (pronation, supination) reads at a glance. In the hand's frame the fingers
+ * point down (-Y), the thumb is on +X, and the palm faces the body.
+ */
+function Hand(props: { side: 'r' | 'l'; length: number; width: number; thick: number; H: number; fist?: boolean }) {
+  const { length, width, thick, H } = props;
+  const back = props.side === 'r' ? 1 : -1;
+  const r = 0.0085 * H;
+  return (
+    <>
+      <RoundedBox args={[width, length, thick]} radius={Math.min(thick, width) / 3} position={[0, -length / 2, 0]} castShadow>
+        <Wood />
+      </RoundedBox>
+      <RoundedBox
+        args={[width * 0.78, length * 0.7, thick * 0.3]}
+        radius={thick * 0.12}
+        position={[0, -length * 0.48, back * thick * 0.42]}
+      >
+        <meshStandardMaterial color={WOOD_JOINT} roughness={0.6} />
+      </RoundedBox>
+      <mesh
+        position={[width / 2 + r * 0.4, -length * (props.fist ? 0.55 : 0.4), -back * thick * 0.1]}
+        rotation={[0, 0, props.fist ? 0.15 : 0.35]}
+        castShadow
+      >
+        <capsuleGeometry args={[r, length * (props.fist ? 0.45 : 0.32), 6, 12]} />
+        <Wood />
+      </mesh>
+    </>
+  );
 }
 
 function Capsule({ length, radius }: { length: number; radius: number }) {
