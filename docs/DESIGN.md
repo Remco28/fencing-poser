@@ -1,6 +1,6 @@
 # Fencing Poser: Design Spec
 
-Status: **draft, D5–D6 pending** (see [Open decisions](#13-open-decisions)).
+Status: **final for v1; build in progress** (see [Open decisions](#13-open-decisions)).
 Last updated: 2026-10-12
 
 ---
@@ -296,22 +296,28 @@ A web app reaches every student device with no install. 3D in the browser is mat
 | 3D | **Three.js** via **React Three Fiber** + **drei** | Standard WebGL stack. drei provides orbit controls and transform handles. |
 | State | **Zustand** with undo/redo history | Simple, and works with React Three Fiber |
 | IK | **Custom two-bone analytic solver** for arms and legs, plus a short-chain solver for the spine | Arms and legs are two-segment chains with an exact, stable solution, so no heavy IK library is needed. |
-| Rotation math | Quaternions; slerp for in-betweens | No gimbal problems; smooth interpolation |
+| Rotation math | Anatomical angles per joint, converted to quaternions for rendering | Readable presets, trivial mirroring, joint limits always hold |
+| Preset authoring | `tools/fit-pose.ts`: describe targets (feet on the line, point at the opponent), solve for angles | Presets come from fencing intent, not guessed numbers |
 | Storage | IndexedDB (via `idb`) | Large, offline, per-browser |
 | Share links | Native `CompressionStream` (deflate) → base64url in `#fragment`; `qrcode` package | No server |
 | Export | Canvas → PNG; `jsPDF` for handouts; `MediaRecorder` for video | All in the browser |
 | Tests | **Vitest** (data model, IK math, link encoding); browser smoke tests | Math and serialization are the parts that break silently |
-| Hosting | Static host that works with a private repo, e.g. **Cloudflare Pages** | Free; only the app code is hosted, never the combinations |
+| Hosting | **GitHub Pages** (public repo), deployed by GitHub Actions | Free; only the app code is hosted, never the combinations |
 
 ### 12.3 Data model (sketch)
 
 ```ts
-type Quat = [number, number, number, number];   // x, y, z, w
 type Vec3 = [number, number, number];            // metres
 
 interface Pose {
-  root: { position: Vec3; rotation: Quat };      // pelvis on the piste
-  joints: Record<JointName, Quat>;               // local rotations; missing = rest
+  // Height is never stored: the fencer is set down so the lowest foot touches
+  // the floor, and `lift` raises them (a flèche in the air).
+  root: { x: number; z: number; lift: number };
+  // Anatomical angles in degrees, e.g. { shoulder_r: { flex: 30, abduct: 10 } }.
+  // A joint table maps each name to an axis, sign and limits. Left and right
+  // values mean the same thing, so mirroring is a swap, presets read like
+  // coaching ("elbow bent 90°"), and interpolation stays inside the limits.
+  joints: Record<JointName, Record<string, number>>;   // missing = 0
 }
 
 interface FencerSetup {
@@ -348,12 +354,12 @@ interface Combination {
 interface PresetPose {
   id: string; name: string;
   builtIn: boolean;
-  pose: Pose;                // authored right-handed, facing +x; mirrored on apply
+  pose: Pose;                // authored right-handed, facing +X; mirrored on apply
   parts: 'full' | 'upper' | 'lower';
 }
 ```
 
-A step is roughly 2 × 17 joints × 4 numbers, so a 10-step combination is a few KB uncompressed. That is small enough for share links.
+A step is roughly 2 × 17 joints × up to 3 angles, so a 10-step combination is a few KB uncompressed. That is small enough for share links.
 
 ### 12.4 Structure (planned)
 
@@ -381,8 +387,6 @@ To settle before building. Recommendations are marked ★.
 
 | # | Question | Options | Status |
 |---|---|---|---|
-| D5 | Where the app is hosted | ★ Cloudflare Pages (free with a private repo) · GitHub Pages (needs a paid plan for a private repo) · Local only for now | proposed; needed by M4 |
-| D6 | Smooth playback in v1? | ★ Yes, in M4, with "motion only" via steps for curved paths (see 9.2) · Later | open: coach questioned blade paths |
 | D7 | Red/green fencer accents | ★ Optional, off by default | proposed |
 
 ### Decided
@@ -395,10 +399,11 @@ To settle before building. Recommendations are marked ★.
 | Presets, custom presets, IK, copy-previous-step, undo | Posing from scratch every time would make the tool unusable |
 | Saved camera per step | Parries and distance need different viewpoints |
 | Private library, no coach-to-coach sharing | Competitive advantage |
-| Private GitHub repo | Same reason |
 | Students get combinations through links that hold the data (D1) | No server, nothing stored online. Snapshot links are acceptable. |
 | Wooden-mannequin look (D2) | Clean and neutral, with joints visible for posing |
 | Pistol grip by default, French selectable per fencer (D3) | The most common grip in modern épée |
+| Smooth playback in M4, with via steps, and the viewer can switch between smooth and discrete at any time (D6) | The coach wants both options |
+| Public repo, hosted on GitHub Pages (D5) | Free. Only the app code is public; combinations live in the coach's browser, exported files and share links, never in the repo. |
 | Units selectable, metric or imperial (D4) | The piste is metric; heights are often thought of in feet and inches |
 
 ---

@@ -6,6 +6,19 @@ Pose two 3D fencers on a to-scale piste, save each moment of an action as a labe
 
 Built for épée first.
 
-**Status:** design phase. Nothing is built yet.
+**Status:** milestone 1 (one posable mannequin with an épée). See the [milestones](docs/DESIGN.md#14-milestones).
 
 - [Design spec](docs/DESIGN.md): what we are building, why, and in what order.
+
+## Run it
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+npm test           # anatomy, mirroring and preset checks
+npm run build      # typecheck + production build into dist/
+```
+
+`?view=top|front|back|side` in the URL picks the starting camera (a stand-in until camera presets land).
+
+Presets are authored from targets rather than guessed angles: `node tools/fit-pose.ts en-garde` prints the solved pose.
