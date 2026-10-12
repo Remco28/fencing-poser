@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { FENCERS } from '../model/combination.ts';
 import { JOINT_BY_NAME, JOINTS, type JointName } from '../model/joints.ts';
 import { angle } from '../model/types.ts';
 import { NUDGE_LABELS, STEP } from './keyboard.ts';
-import { useEditor, type Units } from './store.ts';
+import { activePose, activeSetup, currentStep, useEditor, type Units } from './store.ts';
 
 export function formatHeight(metres: number, units: Units): string {
   if (units === 'metric') return `${Math.round(metres * 100)} cm`;
@@ -10,32 +11,74 @@ export function formatHeight(metres: number, units: Units): string {
   return `${Math.floor(inches / 12)}′ ${inches % 12}″`;
 }
 
-export function Panel() {
-  const { setup, pose, selected, units, select, setAngle, resetJoint, setSetup, setUnits, undo, redo } = useEditor();
-  const canUndo = useEditor((s) => s.past.length > 0);
-  const canRedo = useEditor((s) => s.future.length > 0);
-  const joint = selected ? JOINT_BY_NAME[selected] : null;
+export function formatDistance(metres: number, units: Units): string {
+  if (units === 'metric') return `${metres.toFixed(2)} m`;
+  const inches = Math.round(Math.abs(metres) / 0.0254);
+  return `${metres < 0 ? '−' : ''}${Math.floor(inches / 12)}′ ${inches % 12}″`;
+}
+
+export function Panel({ onOpenLibrary }: { onOpenLibrary: () => void }) {
+  const s = useEditor();
+  const pose = activePose(s);
+  const setup = activeSetup(s);
+  const step = currentStep(s);
+  const joint = s.selected ? JOINT_BY_NAME[s.selected] : null;
 
   return (
     <aside className="panel">
       <header>
-        <h1>Fencing Poser</h1>
-        <p className="hint">Click a body part or the épée to pose it. Drag to orbit, scroll to zoom, right-drag to pan.</p>
+        <div className="section-head">
+          <input
+            className="title"
+            aria-label="Combination title"
+            value={s.combination.title}
+            onChange={(e) => s.setTitle(e.target.value)}
+          />
+          <button onClick={onOpenLibrary}>Library</button>
+        </div>
         <div className="buttons">
-          <button onClick={undo} disabled={!canUndo} title="Ctrl+Z">
+          <button onClick={s.undo} disabled={!s.past.length} title="Ctrl+Z">
             Undo
           </button>
-          <button onClick={redo} disabled={!canRedo} title="Ctrl+Shift+Z">
+          <button onClick={s.redo} disabled={!s.future.length} title="Ctrl+Shift+Z">
             Redo
           </button>
         </div>
       </header>
 
-      <Presets />
+      <section>
+        <h2>
+          Step {s.stepIndex + 1} of {s.combination.steps.length}
+        </h2>
+        <input
+          className="wide"
+          aria-label="Step label"
+          placeholder="Label, e.g. Feint disengage"
+          value={step.label}
+          onChange={(e) => s.setStepText({ label: e.target.value })}
+        />
+        <textarea
+          className="wide"
+          aria-label="Coaching notes"
+          placeholder="Notes for students (optional)"
+          rows={3}
+          value={step.notes}
+          onChange={(e) => s.setStepText({ notes: e.target.value })}
+        />
+      </section>
+
+      <section>
+        <div className="section-head">
+          <h2>Posing fencer</h2>
+          <Toggle label="Fencer" value={s.active} options={FENCERS.map((f) => [f, f])} onChange={s.setActive} />
+        </div>
+        <p className="hint">Click a body part or the épée. Tab steps through the joints.</p>
+        <Presets />
+      </section>
 
       <section>
         <h2>Joint</h2>
-        <select value={selected ?? ''} onChange={(e) => select((e.target.value || null) as JointName | null)}>
+        <select value={s.selected ?? ''} onChange={(e) => s.select((e.target.value || null) as JointName | null)}>
           <option value="">Choose a joint…</option>
           {JOINTS.map((j) => (
             <option key={j.name} value={j.name}>
@@ -62,24 +105,41 @@ export function Panel() {
                     max={d.max}
                     step={1}
                     value={value}
-                    onChange={(e) => setAngle(joint.name, d.key, Number(e.target.value))}
+                    onChange={(e) => s.setAngle(joint.name, d.key, Number(e.target.value))}
                   />
                 </label>
               );
             })}
-            <button className="quiet" onClick={() => resetJoint(joint.name)}>
+            <button className="quiet" onClick={() => s.resetJoint(joint.name)}>
               Straighten this joint <kbd>R</kbd>
             </button>
           </div>
         )}
+        <label className="dof">
+          <span className="dof-head">
+            <span>
+              Position on the piste <kbd>[ ]</kbd>
+            </span>
+            <output>{formatDistance(pose.root.x, s.units)}</output>
+          </span>
+          <input
+            type="range"
+            aria-label="Position on the piste"
+            min={-8.5}
+            max={8.5}
+            step={0.01}
+            value={pose.root.x}
+            onChange={(e) => s.setPosition(Number(e.target.value))}
+          />
+        </label>
       </section>
 
       <section>
-        <h2>Fencer</h2>
+        <h2>Fencer {s.active}</h2>
         <label className="dof">
           <span className="dof-head">
             <span>Height</span>
-            <output>{formatHeight(setup.height, units)}</output>
+            <output>{formatHeight(setup.height, s.units)}</output>
           </span>
           <input
             type="range"
@@ -88,7 +148,7 @@ export function Panel() {
             max={2.1}
             step={0.01}
             value={setup.height}
-            onChange={(e) => setSetup({ height: Number(e.target.value) })}
+            onChange={(e) => s.setSetup({ height: Number(e.target.value) })}
           />
         </label>
         <label className="dof">
@@ -103,7 +163,7 @@ export function Panel() {
             max={1.2}
             step={0.01}
             value={setup.build}
-            onChange={(e) => setSetup({ build: Number(e.target.value) })}
+            onChange={(e) => s.setSetup({ build: Number(e.target.value) })}
           />
         </label>
         <Toggle
@@ -113,7 +173,7 @@ export function Panel() {
             ['right', 'Right'],
             ['left', 'Left'],
           ]}
-          onChange={(handedness) => setSetup({ handedness })}
+          onChange={(handedness) => s.setSetup({ handedness })}
         />
         <Toggle
           label="Grip"
@@ -122,16 +182,20 @@ export function Panel() {
             ['pistol', 'Pistol'],
             ['french', 'French'],
           ]}
-          onChange={(grip) => setSetup({ grip })}
+          onChange={(grip) => s.setSetup({ grip })}
         />
+      </section>
+
+      <section>
+        <h2>Settings</h2>
         <Toggle
           label="Units"
-          value={units}
+          value={s.units}
           options={[
             ['metric', 'Metric'],
             ['imperial', 'Imperial'],
           ]}
-          onChange={setUnits}
+          onChange={s.setUnits}
         />
       </section>
 
@@ -150,6 +214,14 @@ export function Panel() {
           </dd>
           <dt>R</dt>
           <dd>Straighten the joint</dd>
+          <dt>F</dt>
+          <dd>Switch fencer</dd>
+          <dt>[ ]</dt>
+          <dd>Step back / forward on the piste</dd>
+          <dt>, .</dt>
+          <dd>Previous / next step</dd>
+          <dt>N</dt>
+          <dd>New step (copies this one)</dd>
           <dt>Ctrl+Z / Ctrl+Shift+Z</dt>
           <dd>Undo / redo</dd>
           <dt>Esc</dt>
@@ -172,9 +244,9 @@ function Presets() {
   };
 
   return (
-    <section>
+    <div className="presets">
       <div className="section-head">
-        <h2>Poses</h2>
+        <h3>Poses</h3>
         <button className="link" onClick={() => setEditing(!editing)} aria-pressed={editing}>
           {editing ? 'Done' : 'Edit'}
         </button>
@@ -263,7 +335,7 @@ function Presets() {
           </button>
         </form>
       )}
-    </section>
+    </div>
   );
 }
 

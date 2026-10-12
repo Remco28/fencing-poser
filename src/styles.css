@@ -256,3 +256,173 @@ kbd {
   margin: 0;
   color: var(--muted);
 }
+
+.panel h3 {
+  font-size: 13px;
+  margin: 8px 0 6px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+input.title {
+  font: inherit;
+  font-size: 17px;
+  font-weight: 650;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 3px 6px;
+  margin-left: -6px;
+  width: 100%;
+  margin-right: 8px;
+  background: none;
+}
+
+input.title:hover,
+input.title:focus {
+  border-color: var(--line);
+}
+
+input.wide,
+textarea.wide {
+  font: inherit;
+  font-size: 14px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  resize: vertical;
+}
+
+.fencer-tag {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ffffffcc;
+  color: var(--muted);
+  user-select: none;
+}
+
+.fencer-tag.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.step-bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: #ffffffe6;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.step-bar ol {
+  display: flex;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  overflow-x: auto;
+}
+
+.step-bar ol button {
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.step-bar ol button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.step-bar .num {
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+.step-bar .untitled {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.step-bar > button {
+  white-space: nowrap;
+}
+
+.step-bar .divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+}
+
+dialog.library {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 20px;
+  color: var(--ink);
+}
+
+dialog.library::backdrop {
+  background: #0006;
+}
+
+dialog.library h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.message {
+  font-size: 14px;
+  background: var(--control);
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.library-list {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0;
+}
+
+.library-list li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+.library-list li.current .open strong::after {
+  content: ' · open';
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.library-list .open {
+  flex: 1;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  background: none;
+  border-color: transparent;
+}
+
+.library-list .open span {
+  font-size: 12px;
+  color: var(--muted);
+}

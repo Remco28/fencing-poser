@@ -12,6 +12,9 @@ export const NUDGE_LABELS = ['A / D', 'S / W', 'Q / E'];
 
 export const STEP = { normal: 2, big: 10, fine: 0.5 };
 
+/** Metres per press of [ or ]. */
+export const MOVE = { normal: 0.05, big: 0.25, fine: 0.01 };
+
 function typingInto(target: EventTarget | null, key: string): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
@@ -53,6 +56,15 @@ export function useKeyboardPosing() {
       if (key === 'Escape') return s.select(null);
       if (key === 'x') return s.selectOpposite();
       if (key === 'r' && s.selected) return s.resetJoint(s.selected);
+      if (key === 'f') return s.setActive(s.active === 'A' ? 'B' : 'A');
+      if (key === 'n') return s.addStep();
+      if (key === ',' || key === '<') return s.goToStep(s.stepIndex - 1);
+      if (key === '.' || key === '>') return s.goToStep(s.stepIndex + 1);
+      if (key === '[' || key === ']' || key === '{' || key === '}') {
+        e.preventDefault();
+        const metres = e.shiftKey ? MOVE.big : e.altKey ? MOVE.fine : MOVE.normal;
+        return s.advance(key === ']' || key === '}' ? metres : -metres);
+      }
 
       const step = e.shiftKey ? STEP.big : e.altKey ? STEP.fine : STEP.normal;
       NUDGE_KEYS.forEach(([down, up], i) => {

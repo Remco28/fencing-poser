@@ -6,7 +6,7 @@ Pose two 3D fencers on a to-scale piste, save each moment of an action as a labe
 
 Built for épée first.
 
-**Status:** milestone 1 (one posable mannequin with an épée). See the [milestones](docs/DESIGN.md#14-milestones).
+**Status:** milestone 2 in progress: two fencers on a to-scale piste, steps, library with backup, presets, keyboard posing. See the [milestones](docs/DESIGN.md#14-milestones).
 
 - [Design spec](docs/DESIGN.md): what we are building, why, and in what order.
 

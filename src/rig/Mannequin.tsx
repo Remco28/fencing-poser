@@ -5,7 +5,8 @@ import type { Matrix4 } from 'three';
 import type { JointName } from '../model/joints.ts';
 import type { FencerSetup, Pose } from '../model/types.ts';
 import { Epee } from './Epee.tsx';
-import { solveRig } from './kinematics.ts';
+import { FencerTag } from './FencerTag.tsx';
+import { jointPosition, solveRig } from './kinematics.ts';
 import type { Layout } from './layout.ts';
 
 const WOOD = '#d9b68c';
@@ -19,9 +20,14 @@ interface Props {
   heading?: number;
   selected?: JointName | null;
   onSelect?: (joint: JointName) => void;
+  /** A tag floating above the head ("A", "B"). */
+  label?: string;
+  /** The fencer being posed; its tag is highlighted. */
+  active?: boolean;
+  onActivate?: () => void;
 }
 
-export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect }: Props) {
+export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect, label, active = false, onActivate }: Props) {
   const rig = useMemo(() => solveRig(setup, pose, heading), [setup, pose, heading]);
   const [hovered, setHovered] = useState<JointName | null>(null);
   const L = rig.layout;
@@ -63,8 +69,13 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect 
     part(`ankle_${s}`, <Foot layout={L} />),
   ]);
 
+  const head = jointPosition(rig, 'neck');
+
   return (
     <group>
+      {label && (
+        <FencerTag text={label} active={active} position={[head.x, head.y + 0.28 * H, head.z]} onClick={onActivate} />
+      )}
       {part('pelvis', <Ellipsoid position={[0, -0.005 * H, 0]} radii={[0.07 * H, 0.055 * H, 0.1 * H * b]} />)}
       {part('abdomen', <Ellipsoid position={[0, 0.055 * H, 0]} radii={[0.06 * H, 0.068 * H, 0.085 * H * b]} />)}
       {part('chest', <Ellipsoid position={[0, 0.075 * H, 0]} radii={[0.07 * H, 0.085 * H, 0.118 * H * b]} />)}
