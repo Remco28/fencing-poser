@@ -94,10 +94,12 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect,
         <Epee
           highlight={selected === 'grip' ? SELECTED : hovered === 'grip' ? HOVER : null}
           onPointerDown={(e) => {
+            if (hitsHandle(e)) return;
             e.stopPropagation();
             onSelect?.('grip');
           }}
           onPointerOver={(e) => {
+            if (hitsHandle(e)) return;
             e.stopPropagation();
             setHovered('grip');
           }}
@@ -123,10 +125,12 @@ function Part(props: {
       matrixAutoUpdate={false}
       matrix={props.matrix}
       onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+        if (hitsHandle(e)) return;
         e.stopPropagation();
         props.onSelect?.(props.joint);
       }}
       onPointerOver={(e: ThreeEvent<PointerEvent>) => {
+        if (hitsHandle(e)) return;
         e.stopPropagation();
         props.onHover(props.joint);
       }}
@@ -143,6 +147,11 @@ function Part(props: {
       </ColorContext>
     </group>
   );
+}
+
+/** Drag handles sit inside the body; a click that reaches one belongs to it. */
+function hitsHandle(e: ThreeEvent<PointerEvent>): boolean {
+  return e.intersections.some((i) => i.object.userData.handle);
 }
 
 // Children of a part take the part's colour unless they set their own material.

@@ -84,7 +84,11 @@ export function Panel({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           <h2>Posing fencer</h2>
           <Toggle label="Fencer" value={s.active} options={FENCERS.map((f) => [f, f])} onChange={s.setActive} />
         </div>
-        <p className="hint">Click a body part or the épée. Tab steps through the joints.</p>
+        <p className="hint">
+          Drag the coloured handles to pose: <span className="dot hand" /> hands, <span className="dot point" /> point,{' '}
+          <span className="dot foot" /> feet, <span className="dot hips" /> hips. Or click a body part and fine-tune it
+          below. <kbd>H</kbd> hides the handles.
+        </p>
         <Presets />
       </section>
 
@@ -236,6 +240,8 @@ export function Panel({ onOpenLibrary }: { onOpenLibrary: () => void }) {
           <dd>New step (copies this one)</dd>
           <dt>Ctrl+Z / Ctrl+Shift+Z</dt>
           <dd>Undo / redo</dd>
+          <dt>H</dt>
+          <dd>Show / hide drag handles</dd>
           <dt>Esc</dt>
           <dd>Deselect</dd>
         </dl>

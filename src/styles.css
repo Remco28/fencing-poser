@@ -464,3 +464,27 @@ button.small {
   font-size: 13px;
   padding: 4px 8px;
 }
+
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
+
+.dot.hand {
+  background: #e0703a;
+}
+
+.dot.point {
+  background: #d0263a;
+}
+
+.dot.foot {
+  background: #3a7be0;
+}
+
+.dot.hips {
+  background: #7a3ae0;
+}

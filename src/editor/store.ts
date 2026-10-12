@@ -68,6 +68,11 @@ interface EditorState extends Snapshot {
   setAngle: (joint: JointName, dof: string, value: number) => void;
   /** Nudge the selected joint's n-th movement by `delta` degrees. */
   nudge: (dofIndex: number, delta: number) => void;
+  /** Replace the active fencer's pose during one drag; a whole drag undoes as one step. */
+  dragPose: (pose: Pose, dragId: number) => void;
+  /** Whether drag handles show on the active fencer. */
+  handles: boolean;
+  toggleHandles: () => void;
   /** Move the active fencer along the piste, in metres toward their opponent. */
   advance: (metres: number) => void;
   setPosition: (x: number) => void;
@@ -122,7 +127,8 @@ export function activeSetup(s: EditorState): FencerSetup {
 /** Record the current state in history before applying `next`. */
 function edit(state: EditorState, next: Partial<Snapshot>, key?: string): Partial<EditorState> {
   const now = Date.now();
-  const joined = key && state.lastEdit?.key === key && now - state.lastEdit.at < COALESCE_MS;
+  // A drag stays one step however slowly it moves; other edits merge only in quick succession.
+  const joined = key && state.lastEdit?.key === key && (key.startsWith('drag.') || now - state.lastEdit.at < COALESCE_MS);
   const combination = next.combination && { ...next.combination, updatedAt: new Date(now).toISOString() };
   return {
     ...next,
@@ -228,6 +234,9 @@ export const useEditor = create<EditorState>((set, get) => {
         const pose = withAngle(activePose(s), s.selected, dof.key, angle(activePose(s), s.selected, dof.key) + delta);
         return edit(s, { combination: withPose(s, pose) }, `${s.active}.${s.selected}.${dof.key}`);
       }),
+    dragPose: (pose, dragId) => set((s) => edit(s, { combination: withPose(s, pose) }, `drag.${dragId}`)),
+    handles: true,
+    toggleHandles: () => set((s) => ({ handles: !s.handles })),
     advance: (metres) => {
       const s = get();
       s.setPosition(activePose(s).root.x + metres * FORWARD[s.active]);

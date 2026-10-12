@@ -29,9 +29,11 @@ export function jointRotation(pose: Pose, name: JointName, flipX = 1): Quaternio
 
 /**
  * Pose the mannequin. `heading` is the direction the fencer's body faces before
- * any pelvis turn, in degrees (0 = +X along the piste, 180 = -X).
+ * any pelvis turn, in degrees (0 = +X along the piste, 180 = -X). Normally the
+ * fencer is set down on the floor; `pelvisY` instead holds the pelvis at that
+ * height, which drag-to-pose uses to work out what the legs must do.
  */
-export function solveRig(setup: FencerSetup, pose: Pose, heading = 0): Rig {
+export function solveRig(setup: FencerSetup, pose: Pose, heading = 0, pelvisY?: number): Rig {
   const layout = layoutFor(setup);
   const world = {} as Record<JointName, Matrix4>;
 
@@ -58,7 +60,7 @@ export function solveRig(setup: FencerSetup, pose: Pose, heading = 0): Rig {
 
   // Set the fencer down so the lowest foot touches the floor.
   const lowest = Math.min(...soleCorners(layout, world).map((p) => p.y));
-  const drop = new Matrix4().makeTranslation(0, pose.root.lift - lowest, 0);
+  const drop = new Matrix4().makeTranslation(0, pelvisY ?? pose.root.lift - lowest, 0);
   for (const name of Object.keys(world) as JointName[]) world[name].premultiply(drop);
 
   return {

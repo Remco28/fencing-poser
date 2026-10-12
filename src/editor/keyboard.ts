@@ -58,6 +58,7 @@ export function useKeyboardPosing() {
       if (key === 'r' && s.selected) return s.resetJoint(s.selected);
       if (key === 'f') return s.setActive(s.active === 'A' ? 'B' : 'A');
       if (key === 'n') return s.addStep();
+      if (key === 'h') return s.toggleHandles();
       if (key === ',' || key === '<') return s.goToStep(s.stepIndex - 1);
       if (key === '.' || key === '>') return s.goToStep(s.stepIndex + 1);
       if (key === '[' || key === ']' || key === '{' || key === '}') {

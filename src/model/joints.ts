@@ -137,7 +137,7 @@ function ankle(side: Side): JointDef {
     side,
     order: 'ZXY',
     dofs: [
-      { key: 'flex', label: 'Toes up / down', axis: 'z', sign: 1, min: -50, max: 30 },
+      { key: 'flex', label: 'Toes up / down', axis: 'z', sign: 1, min: -50, max: 40 },
       { key: 'roll', label: 'Roll in / out', axis: 'x', sign: sided(side, 1), min: -25, max: 30 },
     ],
   };

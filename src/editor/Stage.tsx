@@ -1,5 +1,6 @@
 import { OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
+import { Handles } from '../ik/Handles.tsx';
 import { FENCERS, HEADING } from '../model/combination.ts';
 import { Mannequin } from '../rig/Mannequin.tsx';
 import { Piste } from '../scene/Piste.tsx';
@@ -58,6 +59,9 @@ export function Stage() {
           onActivate={() => s.setActive(f)}
         />
       ))}
+      {s.handles && (
+        <Handles setup={s.combination.fencers[s.active]} pose={step.poses[s.active]} heading={HEADING[s.active]} />
+      )}
       <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} />
     </Canvas>
   );
