@@ -1,11 +1,16 @@
 import { OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
+import { Vector3 } from 'three';
 import { Handles } from '../ik/Handles.tsx';
 import { FENCERS, HEADING, targetParts } from '../model/combination.ts';
 import { Mannequin } from '../rig/Mannequin.tsx';
 import { CameraRig } from '../scene/CameraRig.tsx';
-import { measure, VIEW_NAMES, viewFor, type ViewName } from '../scene/measure.ts';
+import { FitRig } from '../scene/FitRig.tsx';
+import { jointPosition, solveRig } from '../rig/kinematics.ts';
+import { JOINT_NAMES } from '../model/joints.ts';
+import { HudTracker, JointHud } from './JointHud.tsx';
+import { measure, rigsFor, VIEW_NAMES, viewFor, type ViewName } from '../scene/measure.ts';
 import { Environment } from '../scene/Environment.tsx';
 import { ReadoutLines } from '../scene/Readouts.tsx';
 import { formatDistance } from '../model/units.ts';
@@ -29,6 +34,25 @@ export function Stage() {
   const previous = s.stepIndex > 0 ? s.combination.steps[s.stepIndex - 1] : null;
   const display = step.display ?? {};
   const m = useMemo(() => (display.distance ? measure(s.combination, step) : null), [display.distance, s.combination, step]);
+  const hud = useRef<HTMLDivElement>(null);
+
+  // Where the selected joint is, so its controls can sit beside it.
+  const selectedPoint = useMemo(() => {
+    if (!s.selected) return null;
+    const rig = solveRig(s.combination.fencers[s.active], step.poses[s.active], HEADING[s.active]);
+    return s.selected === 'grip' ? rig.guard.clone() : jointPosition(rig, s.selected);
+  }, [s.selected, s.active, s.combination.fencers, step]);
+
+  /** Everything to keep in frame: every joint, the head and the point. */
+  const fitPoints = () => {
+    const rigs = rigsFor(s.combination, step);
+    const who = s.fitRequest?.who ?? 'both';
+    return FENCERS.filter((f) => who === 'both' || who === f).flatMap((f) => {
+      const rig = rigs[f];
+      const head = jointPosition(rig, 'neck').add(new Vector3(0, 0.17 * rig.layout.height, 0));
+      return [...JOINT_NAMES.map((j) => jointPosition(rig, j)), head, rig.tip.clone(), new Vector3(jointPosition(rig, 'pelvis').x, 0, 0)];
+    });
+  };
 
   return (
     <>
@@ -70,16 +94,41 @@ export function Stage() {
         {s.handles && (
           <Handles setup={s.combination.fencers[s.active]} pose={step.poses[s.active]} heading={HEADING[s.active]} />
         )}
-        <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} />
+        <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} enabled={!s.cameraLocked} />
         <CameraRig flight={s.flight} onView={s.setStepCamera} />
+        <FitRig request={s.fitRequest} points={fitPoints} onView={s.requestView} />
+        <HudTracker point={selectedPoint} el={hud} />
       </Canvas>
+
+      <JointHud el={hud} />
 
       <div className="stage-tools" role="toolbar" aria-label="View">
         {(Object.keys(VIEW_NAMES) as ViewName[]).map((v) => (
-          <button key={v} onClick={() => s.requestView(viewFor(v, step))}>
+          <button key={v} onClick={() => s.requestView(viewFor(v, step))} disabled={s.cameraLocked}>
             {VIEW_NAMES[v]}
           </button>
         ))}
+        <button onClick={() => s.requestFit('both')} disabled={s.cameraLocked} title="Frame both fencers (Z)">
+          Fit both
+        </button>
+        <button onClick={() => s.requestFit(s.active)} disabled={s.cameraLocked} title="Frame the fencer you are posing (Shift+Z)">
+          Fit {s.active}
+        </button>
+        <span className="divider" />
+        <button
+          aria-pressed={s.cameraLocked}
+          onClick={s.toggleCameraLock}
+          title="Lock the camera so it cannot be moved by accident (L)"
+        >
+          {s.cameraLocked ? '🔒 View locked' : '🔓 Lock view'}
+        </button>
+        <button
+          onClick={s.useViewForAllSteps}
+          disabled={!step.camera || s.combination.steps.length < 2}
+          title="Give every step this view, so the shot stays the same throughout"
+        >
+          Same view for all steps
+        </button>
         <span className="divider" />
         <button aria-pressed={!!display.distance} onClick={() => s.setDisplay({ distance: !display.distance })}>
           Distance

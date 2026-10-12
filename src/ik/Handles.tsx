@@ -62,7 +62,7 @@ export function Handles({ setup, pose, heading }: { setup: FencerSetup; pose: Po
     if (!drag.current) return;
     (e.target as unknown as Element).releasePointerCapture(e.pointerId);
     drag.current = null;
-    if (controls) controls.enabled = true;
+    if (controls) controls.enabled = !useEditor.getState().cameraLocked;
   };
 
   return (

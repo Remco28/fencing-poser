@@ -29,6 +29,7 @@ export function useKeyboardPosing() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (typingInto(e.target, e.key)) return;
+      if (e.key === 'Alt') e.preventDefault();
       const s = useEditor.getState();
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       const mod = e.ctrlKey || e.metaKey;
@@ -59,6 +60,8 @@ export function useKeyboardPosing() {
       if (key === 'f') return s.setActive(s.active === 'A' ? 'B' : 'A');
       if (key === 'n') return s.addStep();
       if (key === 'h') return s.toggleHandles();
+      if (key === 'l') return s.toggleCameraLock();
+      if (key === 'z') return s.requestFit(e.shiftKey ? s.active : 'both');
       if (key === ',' || key === '<') return s.goToStep(s.stepIndex - 1);
       if (key === '.' || key === '>') return s.goToStep(s.stepIndex + 1);
       if (key === '[' || key === ']' || key === '{' || key === '}') {
@@ -75,7 +78,18 @@ export function useKeyboardPosing() {
         }
       });
     };
+    // Show which modifiers are held, so Shift and Alt are never a secret.
+    const onModifiers = (e: KeyboardEvent) => useEditor.getState().setHeld({ shift: e.shiftKey, alt: e.altKey });
+    const release = () => useEditor.getState().setHeld({ shift: false, alt: false });
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onModifiers);
+    window.addEventListener('keyup', onModifiers);
+    window.addEventListener('blur', release);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onModifiers);
+      window.removeEventListener('keyup', onModifiers);
+      window.removeEventListener('blur', release);
+    };
   }, []);
 }

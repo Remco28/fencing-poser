@@ -75,6 +75,19 @@ interface EditorState extends Snapshot {
   nudge: (dofIndex: number, delta: number) => void;
   /** Replace the active fencer's pose during one drag; a whole drag undoes as one step. */
   dragPose: (pose: Pose, dragId: number) => void;
+  /** The movement last nudged (from a key or a button), so the controls can light it up. */
+  lastNudge: { dofIndex: number; id: number } | null;
+  /** Modifier keys currently held, shown in the controls. */
+  held: { shift: boolean; alt: boolean };
+  setHeld: (held: { shift: boolean; alt: boolean }) => void;
+  /** Locked: the camera cannot be orbited, panned or zoomed by hand. */
+  cameraLocked: boolean;
+  toggleCameraLock: () => void;
+  /** Give every step the current step's view. */
+  useViewForAllSteps: () => void;
+  /** Ask the camera to frame both fencers, or one. */
+  fitRequest: { who: 'both' | FencerId; id: number } | null;
+  requestFit: (who: 'both' | FencerId) => void;
   /** Whether drag handles show on the active fencer. */
   handles: boolean;
   toggleHandles: () => void;
@@ -259,8 +272,24 @@ export const useEditor = create<EditorState>((set, get) => {
         const dof = s.selected && JOINT_BY_NAME[s.selected].dofs[dofIndex];
         if (!s.selected || !dof) return {};
         const pose = withAngle(activePose(s), s.selected, dof.key, angle(activePose(s), s.selected, dof.key) + delta);
-        return edit(s, { combination: withPose(s, pose) }, `${s.active}.${s.selected}.${dof.key}`);
+        return {
+          ...edit(s, { combination: withPose(s, pose) }, `${s.active}.${s.selected}.${dof.key}`),
+          lastNudge: { dofIndex, id: (s.lastNudge?.id ?? 0) + 1 },
+        };
       }),
+    lastNudge: null,
+    held: { shift: false, alt: false },
+    setHeld: (held) => set((s) => (s.held.shift === held.shift && s.held.alt === held.alt ? {} : { held })),
+    cameraLocked: false,
+    toggleCameraLock: () => set((s) => ({ cameraLocked: !s.cameraLocked })),
+    useViewForAllSteps: () =>
+      set((s) => {
+        const camera = currentStep(s).camera;
+        if (!camera) return {};
+        return edit(s, { combination: withSteps(s.combination, s.combination.steps.map((step) => ({ ...step, camera }))) });
+      }),
+    fitRequest: null,
+    requestFit: (who) => set((s) => ({ fitRequest: { who, id: (s.fitRequest?.id ?? 0) + 1 } })),
     dragPose: (pose, dragId) => set((s) => edit(s, { combination: withPose(s, pose) }, `drag.${dragId}`)),
     handles: true,
     toggleHandles: () => set((s) => ({ handles: !s.handles })),

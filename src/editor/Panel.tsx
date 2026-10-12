@@ -275,6 +275,10 @@ export function Panel({ onOpenLibrary, onShare }: { onOpenLibrary: () => void; o
           <dd>Undo / redo</dd>
           <dt>H</dt>
           <dd>Show / hide drag handles</dd>
+          <dt>Z / Shift+Z</dt>
+          <dd>Fit both fencers / the one you are posing in view</dd>
+          <dt>L</dt>
+          <dd>Lock / unlock the view</dd>
           <dt>Esc</dt>
           <dd>Deselect</dd>
         </dl>

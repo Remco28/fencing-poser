@@ -790,3 +790,128 @@ label.inline select {
     padding: 8px 10px;
   }
 }
+
+/* ---- controls beside the selected joint ---- */
+
+.joint-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  width: 290px;
+  padding: 8px 10px;
+  background: #fffffff2;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px #0002;
+  font-size: 13px;
+  visibility: hidden;
+  will-change: transform;
+}
+
+.hud-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.hud-head button {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.hud-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  transition: background 0.4s;
+}
+
+.hud-row kbd {
+  margin: 0;
+  min-width: 20px;
+  text-align: center;
+}
+
+.hud-row button {
+  padding: 2px 7px;
+  font-size: 12px;
+}
+
+.hud-row.flash {
+  background: #fde3d6;
+  transition: none;
+}
+
+.hud-row.flash kbd {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.hud-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.hud-dirs {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-size: 11px;
+  color: var(--muted);
+  gap: 6px;
+}
+
+.hud-dirs.single {
+  justify-content: center;
+}
+
+.hud-label output {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-label output.limit {
+  color: #c0392b;
+}
+
+.hud-mods {
+  display: flex;
+  justify-content: space-between;
+  margin: 8px 0 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hud-mods span {
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+.hud-mods span.held {
+  background: var(--accent);
+  color: #fff;
+}
+
+.hud-mods span.held kbd {
+  color: #fff;
+  border-color: #fff8;
+}
+
+.hud-more {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.hud-more kbd {
+  margin-left: 0;
+}
