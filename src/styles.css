@@ -167,3 +167,92 @@ select {
     border-top: 1px solid var(--line);
   }
 }
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+kbd {
+  font: 11px ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+.preset-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.preset-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.preset-list input,
+.name-form input {
+  font: inherit;
+  font-size: 14px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.row-actions button {
+  font-size: 13px;
+  padding: 3px 8px;
+}
+
+.name-form {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.panel header .buttons {
+  margin-bottom: 4px;
+}
+
+.keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.keys dt {
+  font: 12px ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color: var(--ink);
+}
+
+.keys dd {
+  margin: 0;
+  color: var(--muted);
+}

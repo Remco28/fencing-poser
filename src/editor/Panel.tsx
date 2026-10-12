@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { JOINT_BY_NAME, JOINTS, type JointName } from '../model/joints.ts';
 import { angle } from '../model/types.ts';
-import { BUILT_IN_PRESETS } from '../presets/builtin.ts';
+import { NUDGE_LABELS, STEP } from './keyboard.ts';
 import { useEditor, type Units } from './store.ts';
 
 export function formatHeight(metres: number, units: Units): string {
@@ -10,7 +11,9 @@ export function formatHeight(metres: number, units: Units): string {
 }
 
 export function Panel() {
-  const { setup, pose, selected, units, select, setAngle, resetJoint, applyPreset, setSetup, setUnits } = useEditor();
+  const { setup, pose, selected, units, select, setAngle, resetJoint, setSetup, setUnits, undo, redo } = useEditor();
+  const canUndo = useEditor((s) => s.past.length > 0);
+  const canRedo = useEditor((s) => s.future.length > 0);
   const joint = selected ? JOINT_BY_NAME[selected] : null;
 
   return (
@@ -18,18 +21,17 @@ export function Panel() {
       <header>
         <h1>Fencing Poser</h1>
         <p className="hint">Click a body part or the épée to pose it. Drag to orbit, scroll to zoom, right-drag to pan.</p>
+        <div className="buttons">
+          <button onClick={undo} disabled={!canUndo} title="Ctrl+Z">
+            Undo
+          </button>
+          <button onClick={redo} disabled={!canRedo} title="Ctrl+Shift+Z">
+            Redo
+          </button>
+        </div>
       </header>
 
-      <section>
-        <h2>Poses</h2>
-        <div className="buttons">
-          {BUILT_IN_PRESETS.map((p) => (
-            <button key={p.id} onClick={() => applyPreset(p)}>
-              {p.name}
-            </button>
-          ))}
-        </div>
-      </section>
+      <Presets />
 
       <section>
         <h2>Joint</h2>
@@ -43,12 +45,14 @@ export function Panel() {
         </select>
         {joint && (
           <div className="dofs">
-            {joint.dofs.map((d) => {
+            {joint.dofs.map((d, i) => {
               const value = angle(pose, joint.name, d.key);
               return (
                 <label key={d.key} className="dof">
                   <span className="dof-head">
-                    <span>{d.label}</span>
+                    <span>
+                      {d.label} <kbd>{NUDGE_LABELS[i]}</kbd>
+                    </span>
                     <output>{Math.round(value)}°</output>
                   </span>
                   <input
@@ -64,7 +68,7 @@ export function Panel() {
               );
             })}
             <button className="quiet" onClick={() => resetJoint(joint.name)}>
-              Straighten this joint
+              Straighten this joint <kbd>R</kbd>
             </button>
           </div>
         )}
@@ -130,7 +134,136 @@ export function Panel() {
           onChange={setUnits}
         />
       </section>
+
+      <section>
+        <h2>Keys</h2>
+        <dl className="keys">
+          <dt>Tab / Shift+Tab</dt>
+          <dd>Next / previous joint</dd>
+          <dt>X</dt>
+          <dd>Same joint, other side</dd>
+          <dt>A D · S W · Q E</dt>
+          <dd>Move the joint (arrows work too)</dd>
+          <dt>Shift / Alt</dt>
+          <dd>
+            Big ({STEP.big}°) / fine ({STEP.fine}°) steps
+          </dd>
+          <dt>R</dt>
+          <dd>Straighten the joint</dd>
+          <dt>Ctrl+Z / Ctrl+Shift+Z</dt>
+          <dd>Undo / redo</dd>
+          <dt>Esc</dt>
+          <dd>Deselect</dd>
+        </dl>
+      </section>
     </aside>
+  );
+}
+
+function Presets() {
+  const { presets, applyPreset, saveCurrentAsPreset, updatePreset, renamePreset, removePreset } = useEditor();
+  const [editing, setEditing] = useState(false);
+  const [naming, setNaming] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+
+  const saveNew = () => {
+    if (naming?.trim()) saveCurrentAsPreset(naming.trim());
+    setNaming(null);
+  };
+
+  return (
+    <section>
+      <div className="section-head">
+        <h2>Poses</h2>
+        <button className="link" onClick={() => setEditing(!editing)} aria-pressed={editing}>
+          {editing ? 'Done' : 'Edit'}
+        </button>
+      </div>
+
+      {!editing && (
+        <div className="buttons">
+          {presets.map((p) => (
+            <button key={p.id} onClick={() => applyPreset(p)}>
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {editing && (
+        <ul className="preset-list">
+          {presets.map((p) => (
+            <li key={`${p.id}:${p.name}`}>
+              <input
+                aria-label="Preset name"
+                defaultValue={p.name}
+                onBlur={(e) => e.target.value !== p.name && renamePreset(p.id, e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+              />
+              <div className="row-actions">
+                {confirming === p.id ? (
+                  <>
+                    <button
+                      onClick={() => {
+                        updatePreset(p.id);
+                        setConfirming(null);
+                      }}
+                    >
+                      Replace with current pose
+                    </button>
+                    <button className="quiet" onClick={() => setConfirming(null)}>
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button className="quiet" onClick={() => setConfirming(p.id)} title="Save the current pose into this preset">
+                      Update
+                    </button>
+                    {p.builtIn ? (
+                      p.modified && (
+                        <button className="quiet" onClick={() => removePreset(p.id)} title="Go back to the original">
+                          Restore
+                        </button>
+                      )
+                    ) : (
+                      <button className="quiet" onClick={() => removePreset(p.id)}>
+                        Delete
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {naming === null ? (
+        <button className="quiet" onClick={() => setNaming('')}>
+          + Save current pose as a preset
+        </button>
+      ) : (
+        <form
+          className="name-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveNew();
+          }}
+        >
+          <input
+            autoFocus
+            placeholder="Name, e.g. Parry 4"
+            value={naming}
+            onChange={(e) => setNaming(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && setNaming(null)}
+          />
+          <button type="submit" disabled={!naming.trim()}>
+            Save
+          </button>
+        </form>
+      )}
+    </section>
   );
 }
 
