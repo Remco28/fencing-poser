@@ -47,7 +47,10 @@ Every decision that shapes the app, newest first within each group, with the rea
 
 | Date | Decision | Why |
 |---|---|---|
-| 2026-10-13 | Free camera: drag turns, Space+drag or right-drag slides, scroll zooms toward the pointer. A tap of Space still plays (on release). A one-line hint sits at the stage's bottom right. | The coach found the preset views and zoom buttons too limiting and had not found right-drag; Space+drag is what drawing apps use. |
+| 2026-10-13 | Camera: drag turns, right-drag pans, scroll zooms toward the pointer; a one-line hint says so at the stage's bottom right. Space+drag was tried and removed. | The coach had not found right-drag. Space+drag competed with Space for Play. |
+| 2026-10-13 | The camera toolbar is grouped by fencer: Side, Overhead, Fit both, then an A group and a B group (Behind, Zoom), each with the fencer's badge. | "Behind A" and "Zoom to A" sat apart, and Zoom followed whoever was being posed. |
+| 2026-10-13 | Motion guides show their key letters only for the movement in use (just nudged, or its row pointed at in the joint controls). | All six letters on a small joint (the spine) were cluttered; the joint controls already show the keys. |
+| 2026-10-13 | Paths are shaped with up to three pins per point: grab the red path anywhere and pull; near a ring moves it; double-click a ring removes it. Each pin is solved once; a smooth spline (one pin = the old halfway bend exactly) carries the arm through them. Older single bends read as a pin halfway. | Not everything moves in one arc (a late drop, an S round two blades). Free-form path drawing was judged too complicated; three pins is the compromise. |
 | 2026-10-13 | The path-shaping banner is one line docked above the step bar ("Path 2 → 3 · Straighten · Done"), not a paragraph over the fencers. | It covered the action it was explaining. |
 | 2026-10-13 | Removed the Joint dropdown, its sliders and the piste-position slider; the controls beside the joint took over typed angles, hips position and Straighten. | They duplicated the controls beside the joint (lean principle; coach agreed). |
 | 2026-10-13 | Stomach and chest bend as one spine by default, with a switch in the joint controls. | Bending the back is one movement to a coach; two joints made it twice the work. |

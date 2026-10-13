@@ -1,4 +1,4 @@
-import { asCombination, newId, type Combination, type Step } from '../model/combination.ts';
+import { asCombination, newId, type Combination, type Pin, type Step } from '../model/combination.ts';
 import type { Pose } from '../model/types.ts';
 
 // A shared combination travels inside the link, after the '#'. Browsers never
@@ -24,6 +24,9 @@ function compactPose(p: Pose) {
   return { root, joints };
 }
 
+const compactJoints = (joints: Pose['joints']) => compactPose({ root: { x: 0, z: 0, lift: 0 }, joints }).joints;
+const compactPin = (p: Pin) => ({ at: +p.at.toFixed(3), joints: compactJoints(p.joints) });
+
 function compactStep(s: Step) {
   return {
     label: s.label || undefined,
@@ -31,7 +34,8 @@ function compactStep(s: Step) {
     poses: { A: compactPose(s.poses.A), B: compactPose(s.poses.B) },
     camera: s.camera && { position: s.camera.position.map(r2), target: s.camera.target.map(r2) },
     display: s.display && Object.keys(s.display).length ? s.display : undefined,
-    bend: s.bend && Object.fromEntries(Object.entries(s.bend).map(([f, j]) => [f, j && compactPose({ root: { x: 0, z: 0, lift: 0 }, joints: j }).joints])),
+    pins: s.pins && Object.fromEntries(Object.entries(s.pins).map(([f, pins]) => [f, pins?.map(compactPin)])),
+    bend: s.bend && Object.fromEntries(Object.entries(s.bend).map(([f, j]) => [f, j && compactJoints(j)])),
     via: s.via && Object.fromEntries(Object.entries(s.via).map(([f, p]) => [f, p && compactPose(p)])),
     motionOnly: s.motionOnly || undefined,
     durationMs: s.durationMs,
@@ -91,8 +95,8 @@ export async function decodeCombination(hash: string): Promise<Combination | nul
         label: s.label ?? '',
         notes: s.notes ?? '',
         poses: { A: pose(s.poses.A), B: pose(s.poses.B) },
-        bend: s.bend && Object.fromEntries(Object.entries(s.bend).map(([f, j]) => [f, j && compactPose({ root: { x: 0, z: 0, lift: 0 }, joints: j }).joints])),
-    via: s.via && Object.fromEntries(Object.entries(s.via).map(([f, p]) => [f, p && pose(p)])),
+        bend: s.bend && Object.fromEntries(Object.entries(s.bend).map(([f, j]) => [f, j && compactJoints(j)])),
+        via: s.via && Object.fromEntries(Object.entries(s.via).map(([f, p]) => [f, p && pose(p)])),
       })),
       createdAt: now,
       updatedAt: now,

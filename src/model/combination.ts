@@ -57,6 +57,13 @@ export interface StepDisplay {
   targets?: { fencer: FencerId; area: TargetArea }[];
 }
 
+/** One place a movement's path is pinned (see Step.pins). */
+export interface Pin {
+  /** How far through the movement, 0 (the step before) to 1 (this step). */
+  at: number;
+  joints: Pose['joints'];
+}
+
 export interface Step {
   id: string;
   label: string;
@@ -66,7 +73,16 @@ export interface Step {
   camera?: StepCamera;
   display?: StepDisplay;
   /**
-   * How the movement into this step is bent, per fencer: how much each arm
+   * How the movement into this step is bent, per fencer: up to three places
+   * on the point's path, each pinned where the coach dragged it. A pin is a
+   * moment in the movement (`at`, 0 to 1) and how much each arm joint turns
+   * away from the plain movement there (degrees). Playback eases the turns
+   * smoothly through every pin and back to nothing at both steps, so the
+   * point passes through each pin and both steps keep their poses.
+   */
+  pins?: Partial<Record<FencerId, Pin[]>>;
+  /**
+   * Older shaping (a single pin halfway; read as one): how much each arm
    * joint turns away from the plain movement at its middle (degrees). The
    * change fades in from nothing at the step before to all of it halfway and
    * back to nothing here, so the point glides round (under the opponent's
@@ -155,6 +171,11 @@ export function copyStep(step: Step): Step {
 }
 
 /** Accepts anything parsed from JSON; returns a combination or null. */
+/** Has the movement into this step been shaped at all? */
+export function isShaped(step: Step): boolean {
+  return !!(step.pins || step.bend || step.via);
+}
+
 export function asCombination(value: unknown): Combination | null {
   const c = value as Partial<Combination> | null;
   if (!c || c.schemaVersion !== 1 || typeof c.id !== 'string' || !Array.isArray(c.steps) || !c.fencers) return null;

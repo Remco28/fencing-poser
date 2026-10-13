@@ -11,7 +11,6 @@ import { hasToured, Tour } from './Tour.tsx';
 export function Editor() {
   const [dialog, setDialog] = useState<'library' | 'share' | null>(null);
   const [touring, setTouring] = useState(() => !hasToured());
-  const panning = useEditor((s) => s.panning);
   useKeyboardPosing();
   useEffect(() => {
     void useEditor.getState().start();
@@ -19,7 +18,7 @@ export function Editor() {
 
   return (
     <div className="app">
-      <main className={`stage${panning ? ' panning' : ''}`}>
+      <main className="stage">
         <Stage />
         <StepBar />
         {touring && <Tour onClose={() => setTouring(false)} />}

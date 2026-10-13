@@ -1,9 +1,9 @@
 import { OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
-import { MOUSE, Vector3 } from 'three';
+import { Vector3 } from 'three';
 import { Handles } from '../ik/Handles.tsx';
-import { FENCERS, HEADING, targetParts } from '../model/combination.ts';
+import { FENCERS, HEADING, isShaped, targetParts } from '../model/combination.ts';
 import { Mannequin } from '../rig/Mannequin.tsx';
 import { CameraRig } from '../scene/CameraRig.tsx';
 import { FitRig } from '../scene/FitRig.tsx';
@@ -12,7 +12,7 @@ import { JOINT_NAMES } from '../model/joints.ts';
 import { HudTracker, JointHud } from './JointHud.tsx';
 import { guidesFor, MotionGuides, useRecentNudge } from './MotionGuides.tsx';
 import { ThumbDial } from './ThumbDial.tsx';
-import { measure, rigsFor, VIEW_NAMES, viewFor, type ViewName } from '../scene/measure.ts';
+import { measure, rigsFor, viewFor } from '../scene/measure.ts';
 import { Environment } from '../scene/Environment.tsx';
 import { ReadoutLines } from '../scene/Readouts.tsx';
 import { PointTrail } from '../scene/PointTrail.tsx';
@@ -36,10 +36,6 @@ const VIEWS: Record<string, [number, number, number]> = {
   nearfront: [2.6, 1.3, 0.6],
 };
 const START = VIEWS[new URLSearchParams(location.search).get('view') ?? ''] ?? [0.6, 2.8, 8.4];
-
-/** Left-drag turns the view, right-drag slides it; with Space held, left-drag slides too. */
-const TURN_BUTTONS = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
-const SLIDE_BUTTONS = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
 
 export function Stage() {
   const s = useEditor();
@@ -168,7 +164,7 @@ export function Stage() {
         {balances.map(({ f, b }) => (
           <BalanceMark key={f} balance={b} />
         ))}
-        {s.selected && <MotionGuides guides={guides} active={recent} />}
+        {s.selected && <MotionGuides guides={guides} active={recent ?? s.hotDof} />}
         {dialSide && <ThumbDial rig={activeRig} side={dialSide} weapon={dialSide === weaponSide} />}
         {s.handles && !s.selected && !playing && !shaping && (
           <Handles setup={s.combination.fencers[s.active]} pose={step.poses[s.active]} heading={HEADING[s.active]} />
@@ -179,7 +175,6 @@ export function Stage() {
           maxPolarAngle={Math.PI * 0.495}
           enabled={!s.cameraLocked && !playing}
           zoomToCursor
-          mouseButtons={s.panning ? SLIDE_BUTTONS : TURN_BUTTONS}
         />
         {playing && <Ticker onTick={s.tickPreview} />}
         {playing && <CameraDriver view={frame?.camera ?? viewFor('side', step)} />}
@@ -203,11 +198,11 @@ export function Stage() {
             <strong>
               Path {s.stepIndex} → {s.stepIndex + 1}
             </strong>
-            <span>Drag a ringed ball to bend that point’s path.</span>
+            <span>Drag a red path to bend it, in up to 3 places. Double-click a ring to remove it.</span>
           </p>
           <button
-            onClick={() => FENCERS.forEach((f) => (step.via?.[f] || step.bend?.[f]) && s.setBend(f, null))}
-            disabled={!step.via && !step.bend}
+            onClick={() => FENCERS.forEach((f) => (step.pins?.[f] || step.via?.[f] || step.bend?.[f]) && s.setPins(f, null))}
+            disabled={!isShaped(step)}
             title="Back to the plain, direct movement. The poses at both steps never change."
           >
             Straighten
@@ -223,7 +218,7 @@ export function Stage() {
             <>View locked · <kbd>L</kbd> unlocks</>
           ) : (
             <>
-              Drag: turn · <kbd>Space</kbd>+drag or right-drag: slide · Scroll: zoom
+              Drag to turn · Right-drag to pan · Scroll to zoom
             </>
           )}
         </p>
@@ -232,22 +227,36 @@ export function Stage() {
       <div className="stage-tools" aria-hidden={playing || undefined}>
         <div className="tool-group" role="toolbar" aria-label="Camera">
           <span className="group-label">Camera</span>
-          {(Object.keys(VIEW_NAMES) as ViewName[]).map((v) => (
-            <button key={v} onClick={() => s.requestView(viewFor(v, step))} disabled={s.cameraLocked || playing}>
-              {VIEW_NAMES[v]}
-            </button>
-          ))}
-          <span className="divider" />
+          <button onClick={() => s.requestView(viewFor('side', step))} disabled={s.cameraLocked || playing}>
+            Side
+          </button>
+          <button onClick={() => s.requestView(viewFor('overhead', step))} disabled={s.cameraLocked || playing}>
+            Overhead
+          </button>
           <button onClick={() => s.requestFit('both')} disabled={s.cameraLocked || playing} title="Zoom so both fencers fill the view (Z)">
-            Zoom to both
+            Fit both
           </button>
-          <button
-            onClick={() => s.requestFit(s.active)}
-            disabled={s.cameraLocked || playing}
-            title={`Zoom in on fencer ${s.active}, the one you are posing (Shift+Z)`}
-          >
-            Zoom to {s.active}
-          </button>
+          {FENCERS.map((f) => (
+            <span key={f} className="fencer-views" role="group" aria-label={`Fencer ${f}`}>
+              <span className={`fencer-badge${f === s.active ? ' on' : ''}`} aria-hidden>
+                {f}
+              </span>
+              <button
+                onClick={() => s.requestView(viewFor(f === 'A' ? 'behindA' : 'behindB', step))}
+                disabled={s.cameraLocked || playing}
+                title={`Look over ${f}’s shoulder`}
+              >
+                Behind
+              </button>
+              <button
+                onClick={() => s.requestFit(f)}
+                disabled={s.cameraLocked || playing}
+                title={`Zoom in on fencer ${f}${f === s.active ? ' (Shift+Z)' : ''}`}
+              >
+                Zoom
+              </button>
+            </span>
+          ))}
           <span className="divider" />
           <Switch on={s.cameraLocked} onToggle={s.toggleCameraLock} title="When on, the camera cannot be moved by accident (L)">
             Lock

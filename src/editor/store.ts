@@ -30,6 +30,7 @@ import {
   newId,
   type Combination,
   type FencerId,
+  type Pin,
   type Step,
   type StepCamera,
   type StepDisplay,
@@ -86,19 +87,19 @@ interface EditorState extends Snapshot {
   /** Start shaping the movement into step `index` (from the step before it). */
   editPath: (index: number) => void;
   exitPath: () => void;
-  /** Bend (offset) or straighten (null) a fencer's path into the current step; a drag undoes as one. */
-  setBend: (fencer: FencerId, bend: Pose['joints'] | null, dragId?: number) => void;
+  /** Pin (bend) or straighten (null) a fencer's path into the current step; a drag undoes as one. */
+  setPins: (fencer: FencerId, pins: Pin[] | null, dragId?: number) => void;
   /** Stomach and chest bend as one spine (the default) or separately. */
   spineTogether: boolean;
   toggleSpineTogether: () => void;
   /** The movement last nudged (from a key or a button), so the controls can light it up. */
   lastNudge: { dofIndex: number; id: number } | null;
+  /** The movement whose row in the joint controls the pointer is over; its guide shows its keys. */
+  hotDof: number | null;
+  setHotDof: (dofIndex: number | null) => void;
   /** Modifier keys currently held, shown in the controls. */
   held: { shift: boolean; alt: boolean };
   setHeld: (held: { shift: boolean; alt: boolean }) => void;
-  /** Space is held: dragging slides the view instead of turning it or grabbing a handle. */
-  panning: boolean;
-  setPanning: (on: boolean) => void;
   /** Locked: the camera cannot be orbited, panned or zoomed by hand. */
   cameraLocked: boolean;
   toggleCameraLock: () => void;
@@ -334,7 +335,7 @@ export const useEditor = create<EditorState>((set, get) => {
     loaded: false,
     folder: null,
 
-    select: (selected, fencer) => set((s) => ({ selected, active: fencer ?? s.active })),
+    select: (selected, fencer) => set((s) => ({ selected, active: fencer ?? s.active, hotDof: null })),
     setActive: (active) => set({ active }),
     selectNext: (step) =>
       set(({ selected }) => {
@@ -354,21 +355,24 @@ export const useEditor = create<EditorState>((set, get) => {
     pathEdit: false,
     editPath: (index) => set({ stepIndex: index, pathEdit: true, selected: null, preview: null }),
     exitPath: () => set({ pathEdit: false }),
-    setBend: (fencer, bend, dragId) =>
+    setPins: (fencer, pins, dragId) =>
       set((s) =>
         edit(
           s,
           {
             combination: withStep(s, (st) => {
-              const bends = { ...st.bend };
-              if (bend) bends[fencer] = bend;
-              else delete bends[fencer];
-              // The older halfway-pose shaping gives way to the bend.
+              const all = { ...st.pins };
+              if (pins?.length) all[fencer] = [...pins].sort((p, q) => p.at - q.at);
+              else delete all[fencer];
+              // Older shaping (a halfway bend or pose) gives way to the pins.
+              const bend = { ...st.bend };
+              delete bend[fencer];
               const via = { ...st.via };
               delete via[fencer];
               return {
                 ...st,
-                bend: Object.keys(bends).length ? bends : undefined,
+                pins: Object.keys(all).length ? all : undefined,
+                bend: Object.keys(bend).length ? bend : undefined,
                 via: Object.keys(via).length ? via : undefined,
               };
             }),
@@ -392,10 +396,10 @@ export const useEditor = create<EditorState>((set, get) => {
         };
       }),
     lastNudge: null,
+    hotDof: null,
+    setHotDof: (hotDof) => set((s) => (s.hotDof === hotDof ? {} : { hotDof })),
     held: { shift: false, alt: false },
     setHeld: (held) => set((s) => (s.held.shift === held.shift && s.held.alt === held.alt ? {} : { held })),
-    panning: false,
-    setPanning: (on) => set((s) => (s.panning === on ? {} : { panning: on })),
     cameraLocked: false,
     toggleCameraLock: () => set((s) => ({ cameraLocked: !s.cameraLocked })),
     toggleSharedView: () =>

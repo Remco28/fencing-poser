@@ -126,6 +126,8 @@ export function JointHud({ el }: { el: RefObject<HTMLDivElement | null> }) {
             key={d.key}
             className={`hud-row${flash === i ? ' flash' : ''}`}
             style={{ borderLeftColor: GUIDE_COLORS[i] }}
+            onMouseEnter={() => s.setHotDof(i)}
+            onMouseLeave={() => s.setHotDof(null)}
             title="The matching coloured path in the view shows where this movement goes"
           >
             <kbd>{KEY_LABELS[i][0]}</kbd>

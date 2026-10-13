@@ -128,7 +128,9 @@ function KeyTag({ text, color, position, strong }: { text: string; color: string
 
 /**
  * Faint paths showing where the selected joint's movements would take it,
- * one per movement, each with its keys at the two ends.
+ * one per movement. The movement in use (just nudged, or its row pointed at
+ * in the joint controls) stands out and shows its keys at the two ends;
+ * showing every key at once crowded small joints like the spine.
  */
 export function MotionGuides({ guides, active }: { guides: Guide[]; /** The movement just used; drawn stronger. */ active: number | null }) {
   return (
@@ -158,7 +160,7 @@ export function MotionGuides({ guides, active }: { guides: Guide[]; /** The move
               <sphereGeometry args={[0.012, 12, 10]} />
               <meshBasicMaterial color={color} depthTest={false} transparent opacity={0.9} />
             </mesh>
-            {length > 0.08 && (
+            {strong && length > 0.08 && (
               <>
                 <KeyTag text={down} color={color} position={beyond(first, g.points[1])} strong={strong} />
                 <KeyTag text={up} color={color} position={beyond(last, g.points[g.points.length - 2])} strong={strong} />

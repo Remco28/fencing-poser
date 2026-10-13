@@ -4,8 +4,8 @@ import { copyStep, HEADING, newCombination, type Combination, type FencerId } fr
 import { curvePose } from '../model/tween.ts';
 import { BUILT_IN_PRESETS } from '../presets/builtin.ts';
 import { solveRig } from '../rig/kinematics.ts';
-import { frameAt } from '../viewer/player.ts';
-import { bendFor, pathMiddle } from './path.ts';
+import { frameAt, throughKnots } from '../viewer/player.ts';
+import { pathPoint, pinFor } from './path.ts';
 
 const P = (id: string) => BUILT_IN_PRESETS.find((p) => p.id === id)!.pose;
 
@@ -44,8 +44,8 @@ describe('shaping a path', () => {
 
   it('sends the point through where the middle of its path is dragged, keeping both steps', () => {
     const c = twoSteps('extension', 'lunge');
-    const lower = pathMiddle(c, 1, 'A', (pos) => frameAt(c, pos)).add(new Vector3(0, -0.25, 0.1));
-    const shaped = { ...c, steps: [c.steps[0], { ...c.steps[1], bend: { A: bendFor(c, 1, 'A', lower) } }] };
+    const lower = pathPoint(c, 1, 'A', 0.5, (pos) => frameAt(c, pos)).add(new Vector3(0, -0.25, 0.1));
+    const shaped = { ...c, steps: [c.steps[0], { ...c.steps[1], pins: { A: [pinFor(c, 1, 'A', lower)] } }] };
     const tip = solveRig(c.fencers.A, frameAt(shaped, 0.5).poses.A, HEADING.A).tip;
     expect(tip.distanceTo(lower)).toBeLessThan(0.03);
     expect(frameAt(shaped, 0).poses.A).toEqual(c.steps[0].poses.A);
@@ -62,7 +62,7 @@ describe('shaping a path', () => {
   ])('never zig-zags: %s to %s, dragged every which way', (from, to) => {
     const c = twoSteps(from, to);
     for (const f of ['A', 'B'] as FencerId[]) {
-      const mid = pathMiddle(c, 1, f, (pos) => frameAt(c, pos));
+      const mid = pathPoint(c, 1, f, 0.5, (pos) => frameAt(c, pos));
       for (const off of [
         [-0.3, -0.4, -0.3],
         [-0.3, -0.2, 0.3],
@@ -70,10 +70,47 @@ describe('shaping a path', () => {
         [0.3, -0.2, 0],
         [0, -0.3, 0.2],
       ] as [number, number, number][]) {
-        const bend = bendFor(c, 1, f, mid.clone().add(new Vector3(...off)));
-        const shaped = { ...c, steps: [c.steps[0], { ...c.steps[1], bend: { [f]: bend } }] };
+        const pin = pinFor(c, 1, f, mid.clone().add(new Vector3(...off)));
+        const shaped = { ...c, steps: [c.steps[0], { ...c.steps[1], pins: { [f]: [pin] } }] };
         expect(spikiness(tips(shaped, f)), `${f} dragged ${off}`).toBeLessThan(1.5);
       }
+    }
+  });
+
+  it('one pin halfway eases in and out like a parabola', () => {
+    for (const k of [0.1, 0.25, 0.5, 0.8]) expect(throughKnots([[0.5, 10]], k)).toBeCloseTo(40 * k * (1 - k));
+  });
+
+  it('reads an older single bend as a pin halfway', () => {
+    const c = twoSteps('extension', 'lunge');
+    const lower = pathPoint(c, 1, 'A', 0.5, (pos) => frameAt(c, pos)).add(new Vector3(0, -0.2, 0));
+    const pin = pinFor(c, 1, 'A', lower);
+    const old = { ...c, steps: [c.steps[0], { ...c.steps[1], bend: { A: pin.joints } }] };
+    const now = { ...c, steps: [c.steps[0], { ...c.steps[1], pins: { A: [pin] } }] };
+    expect(frameAt(old, 0.37).poses.A).toEqual(frameAt(now, 0.37).poses.A);
+  });
+
+  // Not everything moves in one arc: a feint that drops late, or an S round
+  // two blades. Several pins send the point through each, still gliding.
+  it.each([
+    ['extension', 'lunge'],
+    ['en-garde', 'parry-4'],
+  ])('passes through two or three pins and still glides: %s to %s', (from, to) => {
+    const c = twoSteps(from, to);
+    const at = (t: number) => pathPoint(c, 1, 'A', t, (pos) => frameAt(c, pos));
+    for (const offsets of [
+      [[0.25, [0, -0.2, 0]], [0.75, [0, 0.15, 0.1]]],
+      [[0.2, [0, 0, 0.15]], [0.5, [0, -0.2, 0]], [0.8, [0, 0, -0.15]]],
+      [[0.3, [0, 0, 0]], [0.6, [0, -0.2, 0]]],
+    ] as [number, [number, number, number]][][]) {
+      const targets = offsets.map(([t, off]) => ({ t, target: at(t).add(new Vector3(...off)) }));
+      const pins = targets.map(({ t, target }) => pinFor(c, 1, 'A', target, t));
+      const shaped = { ...c, steps: [c.steps[0], { ...c.steps[1], pins: { A: pins } }] };
+      for (const { t, target } of targets) {
+        const tip = solveRig(c.fencers.A, frameAt(shaped, t).poses.A, HEADING.A).tip;
+        expect(tip.distanceTo(target), `pin at ${t}`).toBeLessThan(0.03);
+      }
+      expect(spikiness(tips(shaped, 'A', 90)), JSON.stringify(offsets)).toBeLessThan(1.6);
     }
   });
 });

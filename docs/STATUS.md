@@ -22,9 +22,9 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 
 ### Combinations
 - **Steps** with label, notes, targets and timing; new steps copy the current one; the step bar with Play and a ⋯ menu per step. `src/editor/StepBar.tsx`, `src/model/combination.ts`
-- **Path shaping**: click the arrow between two steps (or, with Ghost on, the "Shape the path" button or the red trail) and drag the ringed ball in the middle of a point's path to bend the movement (e.g. under the blade); stored as a change to the arm's joints at the middle of the movement (`Step.bend`), faded in and out so the point glides. `src/ik/path.ts`, `src/ik/PathHandles.tsx`, `src/model/tween.ts`
+- **Path shaping**: click the arrow between two steps (or, with Ghost on, the "Shape the path" button or the red trail) and grab a point's red path anywhere to bend the movement (e.g. under the blade), pinning it in up to three places (double-click a ring to remove it); stored as pins (`Step.pins`: a moment and a change to the arm's joints), carried through by a smooth spline so the point glides. `src/ik/path.ts`, `src/ik/PathHandles.tsx`, `src/model/tween.ts`
 - **Undo/redo** for every change; a drag or a held key undoes as one step. `src/editor/store.ts`
-- **Camera**: free — drag turns, Space+drag or right-drag slides, scroll zooms to the pointer; Side, Overhead, Behind A/B, Zoom to both / to one fencer, Lock, One view for all steps; each step keeps its view. `src/scene/CameraRig.tsx`, `FitRig.tsx`
+- **Camera**: drag turns, right-drag pans, scroll zooms to the pointer; Side, Overhead, Fit both, and per fencer Behind and Zoom; Lock, One view for all steps; each step keeps its view. `src/scene/CameraRig.tsx`, `FitRig.tsx`
 - **Show**: distances (feet, point to opponent, "Touch"), ghost of the previous step, labels. `src/scene/measure.ts`
 - **Play** in the editor (Space), a **timeline** to scrub between steps, and **Loop**. `src/editor/StepBar.tsx`, `src/scene/playback.tsx`, `src/viewer/player.ts`
 - **Point trail** with the ghost and while shaping a path. `src/scene/PointTrail.tsx`

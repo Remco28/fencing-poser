@@ -332,11 +332,11 @@ function HelpTab({ onTour }: { onTour: () => void }) {
           <dt>, .</dt>
           <dd>Previous / next step</dd>
           <dt>Space</dt>
-          <dd>Play / stop (tap)</dd>
+          <dd>Play / stop</dd>
           <dt>Drag</dt>
           <dd>Turn the view</dd>
-          <dt>Space+drag / right-drag</dt>
-          <dd>Slide the view</dd>
+          <dt>Right-drag</dt>
+          <dd>Pan (slide the view)</dd>
           <dt>Scroll</dt>
           <dd>Zoom toward the pointer</dd>
           <dt>N</dt>

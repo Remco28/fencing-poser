@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isShaped } from '../model/combination.ts';
 import { Switch } from '../ui/Switch.tsx';
 import { keyAt } from '../viewer/player.ts';
 import { useEditor } from './store.ts';
@@ -57,13 +58,13 @@ export function StepBar() {
             <li key={step.id}>
               {i > 0 && (
                 <button
-                  className={`path-link${s.pathEdit && s.stepIndex === i ? ' on' : ''}${step.via || step.bend ? ' shaped' : ''}`}
+                  className={`path-link${s.pathEdit && s.stepIndex === i ? ' on' : ''}${isShaped(step) ? ' shaped' : ''}`}
                   onClick={() => (s.pathEdit && s.stepIndex === i ? s.exitPath() : s.editPath(i))}
                   disabled={playing}
-                  title={`Shape the movement from step ${i} to step ${i + 1}${step.via || step.bend ? ' (shaped)' : ''}`}
+                  title={`Shape the movement from step ${i} to step ${i + 1}${isShaped(step) ? ' (shaped)' : ''}`}
                   aria-label={`Shape the movement from step ${i} to step ${i + 1}`}
                 >
-                  {step.via || step.bend ? '⤳' : '→'}
+                  {isShaped(step) ? '⤳' : '→'}
                 </button>
               )}
               <div className={`step-chip${i === shownIndex ? ' on' : ''}${step.motionOnly ? ' via' : ''}`}>

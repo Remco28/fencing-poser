@@ -1547,12 +1547,29 @@ button.switch.on .knob {
   color: #b4202f;
 }
 
-.stage.panning canvas {
-  cursor: grab;
+.fencer-views {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 3px 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
 }
 
-.stage.panning canvas:active {
-  cursor: grabbing;
+.fencer-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: #9aa0a8;
+}
+
+.fencer-badge.on {
+  background: var(--accent);
 }
 
 .camera-hint {
