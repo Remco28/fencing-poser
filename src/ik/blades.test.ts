@@ -63,3 +63,18 @@ describe('blade contact', () => {
     expect(short).toBeGreaterThan(1);
   });
 });
+
+describe('leaning in to touch', () => {
+  it('leans the body in when the arm alone falls short, and stays balanced', async () => {
+    const { balanceOf } = await import('../rig/balance.ts');
+    const upright = enGardeAt(0).joints.pelvis?.lean ?? 0;
+    // Step A back until a touch only lands by leaning in.
+    let found = null;
+    for (let x = -0.9; x > -2 && !found; x -= 0.03) {
+      const { poses, short } = touch(c, { A: enGardeAt(x), B: enGardeAt(0.95) }, 'A', 'body');
+      if (short === 0 && (poses.A.joints.pelvis?.lean ?? 0) > upright) found = poses;
+    }
+    expect(found).not.toBeNull();
+    expect(balanceOf(solveRig(c.fencers.A, found!.A, HEADING.A)).outside).toBe(0);
+  });
+});

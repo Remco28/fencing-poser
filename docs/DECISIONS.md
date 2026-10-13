@@ -26,6 +26,10 @@ Every decision that shapes the app, newest first within each group, with the rea
 | 2026-10-12 | Quinte is not built in. | The coach was not sure of the definition to use; it can be saved as a custom pose. |
 | 2026-10-12 | No sound or timing marks for now. | The coach: not needed yet. |
 | 2026-10-12 | Blades push each other; arms and bodies do not. | Blade-on-blade contact is well defined; arms bend too many ways to guess. |
+| 2026-10-13 | Balance is a **warning, never a correction**: a red "off balance" mark appears under a fencer whose centre of mass lies outside their feet. A foot about to land (within 20 cm of the floor) counts as support. No setting. | Auto-correcting would fight the coach's posing, and some actions (a flèche) are off balance on purpose. Warning on every mid-step would be noise. |
+| 2026-10-13 | **Touch leans the body in** (hips and spine) when the arm alone falls short, in small steps, never past balanced. No new control. | A committed-looking touch without another option; balance caps the lean, so the two never fight. |
+| 2026-10-13 | **Not built:** soft "spring" joint limits and a flexibility setting. If a real fencing position is blocked, widen that joint's limit instead. | Limits already exist on every joint (shoulders, hips, spine included); a global looseness option would not earn its place. |
+| 2026-10-13 | **Ground snapping needs nothing new:** fencers are always set down on the floor, dragged feet cannot go below it, and one foot can still be lifted. | Already the behaviour; a switch would add nothing. |
 
 ## Sharing, storage and hosting
 

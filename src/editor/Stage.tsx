@@ -15,6 +15,8 @@ import { ThumbDial } from './ThumbDial.tsx';
 import { measure, rigsFor, VIEW_NAMES, viewFor, type ViewName } from '../scene/measure.ts';
 import { Environment } from '../scene/Environment.tsx';
 import { ReadoutLines } from '../scene/Readouts.tsx';
+import { BalanceMark } from '../scene/BalanceMark.tsx';
+import { balanceOf } from '../rig/balance.ts';
 import { formatDistance } from '../model/units.ts';
 import { currentStep, useEditor } from './store.ts';
 import { Switch } from '../ui/Switch.tsx';
@@ -43,6 +45,18 @@ export function Stage() {
   const previous = !playing && s.stepIndex > 0 ? s.combination.steps[s.stepIndex - 1] : null;
   const display = step.display ?? {};
   const m = useMemo(() => (display.distance ? measure(s.combination, step) : null), [display.distance, s.combination, step]);
+  // Off-balance warnings, for poses the coach makes (not while playing).
+  const balances = useMemo(
+    () =>
+      playing
+        ? []
+        : FENCERS.flatMap((f) => {
+            if (step.poses[f].root.lift > 0) return [];
+            const b = balanceOf(solveRig(s.combination.fencers[f], step.poses[f], HEADING[f]));
+            return b.outside > 0 ? [{ f, b }] : [];
+          }),
+    [playing, step, s.combination.fencers],
+  );
   const hud = useRef<HTMLDivElement>(null);
   const leader = useRef<SVGLineElement>(null);
   const recent = useRecentNudge(s.lastNudge);
@@ -125,6 +139,9 @@ export function Stage() {
             />
           ))}
         {m && <ReadoutLines m={m} />}
+        {balances.map(({ f, b }) => (
+          <BalanceMark key={f} balance={b} />
+        ))}
         {s.selected && <MotionGuides guides={guides} active={recent} />}
         {dialSide && <ThumbDial rig={activeRig} side={dialSide} weapon={dialSide === weaponSide} />}
         {s.handles && !s.selected && !playing && (

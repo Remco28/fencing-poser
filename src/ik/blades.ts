@@ -1,6 +1,8 @@
 import { Matrix4, Vector3 } from 'three';
 import { HEADING, type Combination, type FencerId, type TargetArea } from '../model/combination.ts';
+import { clampDof } from '../model/joints.ts';
 import type { Pose } from '../model/types.ts';
+import { balanceOf } from '../rig/balance.ts';
 import { jointPosition, solveRig, type Rig } from '../rig/kinematics.ts';
 import { aim, reach } from './ik.ts';
 
@@ -140,20 +142,45 @@ export function targetPoint(r: Rig, area: TargetArea, weaponSide: 'r' | 'l', fro
  * hand aims. Returns the new poses and how far short the point still is (0
  * when it lands); a distant target needs a step or a lunge first.
  */
+/** Leaning in for a touch: how far each part of the body can bend toward the target, at full lean. */
+const FULL_LEAN = { pelvis: 18, abdomen: 12, chest: 12 };
+const LEAN_STEPS = [0.25, 0.5, 0.75, 1];
+
+function leaned(pose: Pose, k: number): Pose {
+  const add = (joint: 'pelvis' | 'abdomen' | 'chest', dof: string, deg: number) => ({
+    ...pose.joints[joint],
+    [dof]: clampDof(joint, dof, (pose.joints[joint]?.[dof] ?? 0) + deg * k),
+  });
+  return {
+    ...pose,
+    joints: {
+      ...pose.joints,
+      pelvis: add('pelvis', 'lean', FULL_LEAN.pelvis),
+      abdomen: add('abdomen', 'flex', FULL_LEAN.abdomen),
+      chest: add('chest', 'flex', FULL_LEAN.chest),
+    },
+  };
+}
+
+/**
+ * Bring `mover`'s point onto a target on the opponent: the arm reaches and the
+ * hand aims; if the arm alone falls short, the body leans in, step by step,
+ * but never so far that the fencer would be off balance. Returns the new
+ * poses and how far short the point still is (0 when it lands); a distant
+ * target needs a step or a lunge first.
+ */
 export function touch(c: Combination, poses: Poses, mover: FencerId, area: TargetArea): { poses: Poses; short: number } {
   const opp = other(mover);
-  const r = rig(c, poses, mover);
   const side = c.fencers[opp].handedness === 'right' ? 'r' : 'l';
-  const target = targetPoint(rig(c, poses, opp), area, side, r.tip);
+  const target = targetPoint(rig(c, poses, opp), area, side, rig(c, poses, mover).tip);
   const wristName = weaponWrist(c, mover);
-  const build = (p: Pose) => solveRig(c.fencers[mover], p, HEADING[mover]);
-  const wrist = jointPosition(r, wristName);
   const armSide = wristName === 'wrist_r' ? 'r' : 'l';
-  const reachToTip = r.tip.distanceTo(wrist);
+  const build = (p: Pose) => solveRig(c.fencers[mover], p, HEADING[mover]);
+
   // Reach and aim pull on each other (aiming changes where the hand must be),
   // so alternate them a few times; the point settles on the target.
-  const attempt = (wristTarget: Vector3) => {
-    let p = poses[mover];
+  const settle = (start: Pose, wristTarget: Vector3) => {
+    let p = start;
     let goal = wristTarget;
     for (let i = 0; i < 6; i++) {
       p = aim(reach(p, build, 'arm', armSide, goal), build, c.fencers[mover], target);
@@ -162,11 +189,25 @@ export function touch(c: Combination, poses: Poses, mover: FencerId, area: Targe
     }
     return { pose: p, miss: build(p).tip.distanceTo(target) };
   };
-  // First keep the blade's angle and carry the hand; if that cannot land,
-  // put arm and blade in one line from the shoulder, as in a direct thrust.
-  const kept = attempt(target.clone().sub(r.tip.clone().sub(wrist)));
-  const shoulder = jointPosition(r, `shoulder_${armSide}`);
-  const line = attempt(target.clone().sub(target.clone().sub(shoulder).setLength(reachToTip)));
-  const best = kept.miss <= line.miss ? kept : line;
+
+  // From a body pose: first keep the blade's angle and carry the hand; if that
+  // cannot land, put arm and blade in one line from the shoulder, as in a
+  // direct thrust. Keep whichever gets closer.
+  const fromBody = (body: Pose) => {
+    const r = build(body);
+    const wrist = jointPosition(r, wristName);
+    const kept = settle(body, target.clone().sub(r.tip.clone().sub(wrist)));
+    const shoulder = jointPosition(r, `shoulder_${armSide}`);
+    const line = settle(body, target.clone().sub(target.clone().sub(shoulder).setLength(r.tip.distanceTo(wrist))));
+    return kept.miss <= line.miss ? kept : line;
+  };
+
+  let best = fromBody(poses[mover]);
+  for (const k of LEAN_STEPS) {
+    if (best.miss < 0.02) break;
+    const tried = fromBody(leaned(poses[mover], k));
+    if (balanceOf(build(tried.pose)).outside > 0) break;
+    if (tried.miss < best.miss) best = tried;
+  }
   return { poses: { ...poses, [mover]: best.pose }, short: best.miss < 0.02 ? 0 : best.miss };
 }

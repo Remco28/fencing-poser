@@ -80,7 +80,8 @@ function withGripDefaults(setup: FencerSetup, pose: Pose): Pose {
 
 export const PISTOL_TILT = 10;
 
-function soleCorners(layout: Layout, world: Record<JointName, Matrix4>): Vector3[] {
+/** The four corners of each sole, in world space. */
+export function soleCorners(layout: Layout, world: Record<JointName, Matrix4>): Vector3[] {
   const y = -layout.ankleHeight;
   const w = layout.footWidth / 2;
   const corners: Vector3[] = [];

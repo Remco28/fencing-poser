@@ -3,7 +3,7 @@
 Where the app is now, where each part lives, and what comes next. Update this with every round of work. Decisions and their reasons are in [DECISIONS.md](DECISIONS.md); the original plan is in [DESIGN.md](DESIGN.md).
 
 **Live:** https://remco28.github.io/fencing-poser/ (republished on every push to `main`)
-**Last updated:** 2026-10-12
+**Last updated:** 2026-10-13
 
 ## The rule for every round
 
@@ -17,7 +17,8 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Keyboard**: Tab / A D · S W · Q E / Shift / Alt / X / R and more (full list in the Help tab). `src/editor/keyboard.ts`
 - **Controls beside the joint**, with coloured motion paths and key tags, and a **thumb clock** for the wrist. `src/editor/JointHud.tsx`, `MotionGuides.tsx`, `ThumbDial.tsx`
 - **Presets**: footwork, seven parries, body evasions, and the coach's own, each with a ⋯ menu (apply to the other fencer, replace, rename, delete or restore); apply to the whole body, arms and torso, or legs. `src/presets/`, `src/editor/PresetsPanel.tsx`
-- **Blades**: engage in sixte or quarte, touch a target, blades push each other aside. `src/ik/blades.ts`
+- **Blades**: engage in sixte or quarte, touch a target (the body leans in if the arm falls short, never past balanced), blades push each other aside. `src/ik/blades.ts`
+- **Balance**: centre of mass from a segment-mass model; an "off balance" mark appears under a fencer whose centre lies outside the feet (editor only). `src/rig/balance.ts`, `src/scene/BalanceMark.tsx`
 
 ### Combinations
 - **Steps** with label, notes, targets, timing and "motion only"; new steps copy the current one; the step bar with Play and a ⋯ menu per step. `src/editor/StepBar.tsx`, `src/model/combination.ts`
@@ -32,7 +33,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Export**: captioned picture, PDF handout (two steps per page), video of smooth playback, combination file. `src/export/`
 
 ### Quality
-- 81 unit tests (anatomy directions, IK, blades, playback, links, merging, store); run `npm test`.
+- 91 unit tests (anatomy directions, IK, blades, playback, links, merging, store); run `npm test`.
 - Visual checks are done in a headless browser through a dev-only `window.__editor` hook.
 
 ## Next (agreed with the coach)
@@ -51,6 +52,8 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 | Quinte preset | Definition undecided; can be a custom pose. |
 | Arms and bodies pushing each other | They bend too many ways to guess; blades only. |
 | Foil and sabre | Épée first. |
+| Soft joint limits, flexibility setting | Every joint already has limits; widen one if a real position is blocked. |
+| Automatic balancing | Warn only; correcting would fight the coach, and some actions are off balance on purpose. |
 
 ## Known rough edges
 
