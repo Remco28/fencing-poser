@@ -1486,3 +1486,34 @@ button.switch.on .knob {
   font-size: 13px;
   padding: 4px 8px;
 }
+
+.tour {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30;
+  width: min(380px, calc(100% - 32px));
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px #0003;
+  padding: 18px 20px;
+}
+
+.tour h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.tour p {
+  margin: 0 0 14px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.tour .tour-count {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}

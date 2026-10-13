@@ -45,6 +45,11 @@ Every decision that shapes the app, newest first within each group, with the rea
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-13 | Removed the Joint dropdown, its sliders and the piste-position slider; the controls beside the joint took over typed angles, hips position and Straighten. | They duplicated the controls beside the joint (lean principle; coach agreed). |
+| 2026-10-13 | Stomach and chest bend as one spine by default, with a switch in the joint controls. | Bending the back is one movement to a coach; two joints made it twice the work. |
+| 2026-10-13 | The point trail comes with Ghost (no new switch), from the previous real step through any via steps. No arrows. | Shows a disengage's path; one less option. |
+| 2026-10-13 | A timeline in the step bar scrubs the movement; Loop repeats playback. | Agreed next step; practising a phrase. |
+| 2026-10-13 | A four-card first-run tour, reopenable from Help. | New users need the handles, the joint controls, Play and Share explained once. |
 | 2026-10-12 | Keyboard posing: Tab picks a joint, A/D, S/W, Q/E move its three movements (Shift ×5, Alt fine), X jumps to the other side. | Approved by the coach; one hand on the keys, one on the mouse. |
 | 2026-10-12 | The selected joint's controls appear beside the fencer in the 3D view with their keys; each movement draws a faint coloured path with its keys at the ends. | The coach found it trial and error to learn what each key did. |
 | 2026-10-12 | Pronation is shown as a thumb clock ("thumb at 1 o'clock") around the wrist. | Hard to see on the model, especially behind the guard; coaches already describe it this way. |

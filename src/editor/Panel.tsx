@@ -24,7 +24,8 @@ function rememberedTab(): Tab {
   }
 }
 
-export function Panel({ onOpenLibrary, onShare }: { onOpenLibrary: () => void; onShare: () => void }) {
+export function Panel(props: { onOpenLibrary: () => void; onShare: () => void; onTour: () => void }) {
+  const { onOpenLibrary, onShare } = props;
   const s = useEditor();
   const [tab, setTabState] = useState<Tab>(rememberedTab);
   const setTab = (t: Tab) => {
@@ -90,7 +91,7 @@ export function Panel({ onOpenLibrary, onShare }: { onOpenLibrary: () => void; o
         {tab === 'pose' && <PoseTab />}
         {tab === 'step' && <StepTab />}
         {tab === 'fencers' && <FencersTab />}
-        {tab === 'help' && <HelpTab />}
+        {tab === 'help' && <HelpTab onTour={props.onTour} />}
       </div>
     </aside>
   );
@@ -294,10 +295,13 @@ function FencersTab() {
   );
 }
 
-function HelpTab() {
+function HelpTab({ onTour }: { onTour: () => void }) {
   const s = useEditor();
   return (
     <>
+      <section>
+        <button onClick={onTour}>Show the quick tour again</button>
+      </section>
       <section>
         <h2>Settings</h2>
         <Toggle

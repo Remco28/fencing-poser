@@ -6,9 +6,11 @@ import { ShareDialog } from './ShareDialog.tsx';
 import { Stage } from './Stage.tsx';
 import { StepBar } from './StepBar.tsx';
 import { useEditor } from './store.ts';
+import { hasToured, Tour } from './Tour.tsx';
 
 export function Editor() {
   const [dialog, setDialog] = useState<'library' | 'share' | null>(null);
+  const [touring, setTouring] = useState(() => !hasToured());
   useKeyboardPosing();
   useEffect(() => {
     void useEditor.getState().start();
@@ -19,8 +21,9 @@ export function Editor() {
       <main className="stage">
         <Stage />
         <StepBar />
+        {touring && <Tour onClose={() => setTouring(false)} />}
       </main>
-      <Panel onOpenLibrary={() => setDialog('library')} onShare={() => setDialog('share')} />
+      <Panel onOpenLibrary={() => setDialog('library')} onShare={() => setDialog('share')} onTour={() => setTouring(true)} />
       <LibraryDialog open={dialog === 'library'} onClose={() => setDialog(null)} />
       <ShareDialog open={dialog === 'share'} onClose={() => setDialog(null)} />
     </div>

@@ -15,7 +15,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Mannequin**: 17 joints with anatomical angles and human limits; height, build, handedness, grip per fencer. `src/model/joints.ts`, `src/rig/`
 - **Drag-to-pose**: handles on hands, point, feet, hips; exact two-bone IK, feet stay planted when the hips move. `src/ik/ik.ts`, `src/ik/Handles.tsx`
 - **Keyboard**: Tab / A D · S W · Q E / Shift / Alt / X / R and more (full list in the Help tab). `src/editor/keyboard.ts`
-- **Controls beside the joint**, with coloured motion paths and key tags, and a **thumb clock** for the wrist. `src/editor/JointHud.tsx`, `MotionGuides.tsx`, `ThumbDial.tsx`
+- **Controls beside the joint** (the only joint controls): keys and arrows per movement, click a value to type an angle, a position row for the hips, Straighten; coloured motion paths with key tags; a **thumb clock** for the wrist; stomach and chest bend as **one spine** by default. `src/editor/JointHud.tsx`, `MotionGuides.tsx`, `ThumbDial.tsx`
 - **Presets**: footwork, seven parries, body evasions, and the coach's own, each with a ⋯ menu (apply to the other fencer, replace, rename, delete or restore); apply to the whole body, arms and torso, or legs. `src/presets/`, `src/editor/PresetsPanel.tsx`
 - **Blades**: engage in sixte or quarte, touch a target (the body leans in if the arm falls short, never past balanced), blades push each other aside. `src/ik/blades.ts`
 - **Balance**: centre of mass from a segment-mass model; an "off balance" mark appears under a fencer whose centre lies outside the feet (editor only). `src/rig/balance.ts`, `src/scene/BalanceMark.tsx`
@@ -25,7 +25,9 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Undo/redo** for every change; a drag or a held key undoes as one step. `src/editor/store.ts`
 - **Camera**: Side, Overhead, Behind A/B, Zoom to both / to one fencer, Lock, One view for all steps; each step keeps its view. `src/scene/CameraRig.tsx`, `FitRig.tsx`
 - **Show**: distances (feet, point to opponent, "Touch"), ghost of the previous step, labels. `src/scene/measure.ts`
-- **Play** in the editor (Space). `src/scene/playback.tsx`, `src/viewer/player.ts`
+- **Play** in the editor (Space), a **timeline** to scrub between steps, and **Loop**. `src/editor/StepBar.tsx`, `src/scene/playback.tsx`, `src/viewer/player.ts`
+- **Point trail** with the ghost: each point's path from the previous real step, through via steps. `src/scene/PointTrail.tsx`
+- **First-run tour** (four cards; Help → Show the quick tour again). `src/editor/Tour.tsx`
 
 ### Library and sharing
 - **Library**: autosave in the browser, collections, search, sort, export selected, import with newest-wins merge, folder sync with 14 daily snapshots, persistent storage. `src/library/`, `src/editor/LibraryDialog.tsx`
@@ -33,15 +35,16 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Export**: captioned picture, PDF handout (two steps per page), video of smooth playback, combination file. `src/export/`
 
 ### Quality
-- 93 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, blades, playback, links, merging, store); run `npm test`.
+- 96 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, blades, playback, links, merging, store); run `npm test`.
 - Visual checks are done in a headless browser through a dev-only `window.__editor` hook.
 
-## Next (agreed with the coach)
+## Testing with people
 
-1. Timeline scrubbing in the step bar, and a loop for practising a phrase.
-2. Move several joints as one (a whole arm, the whole spine) with the same keys.
-3. Point trail and simple arrows to show the path of the point between steps.
-4. A short first-run tour, and a test guide with a feedback form for the coach's testers.
+- **Round 1:** `human_feedback/round-2026-10-13-first-coach-test/index.html`, a guide and feedback form (opens offline in a browser). The tester exports `human-feedback-round-2026-10-13-first-coach-test.zip` and puts it beside the guide; the next agent reads it (see the office's human-feedback workflow).
+
+## Next
+
+Decided by the coach's feedback from round 1. Until then: keep trimming what the round shows is unused.
 
 ## Deliberately not done
 
@@ -54,6 +57,8 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 | Foil and sabre | Épée first. |
 | Soft joint limits, flexibility setting | Every joint already has limits; widen one if a real position is blocked. |
 | Automatic balancing | Warn only; correcting would fight the coach, and some actions are off balance on purpose. |
+| Arrows | The point trail shows the movement; arrows would be one more thing to place by hand. |
+| Moving a whole arm as one | The hand drag already moves the whole arm; only the spine needed it. |
 
 ## Known rough edges
 
