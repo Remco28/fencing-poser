@@ -118,4 +118,40 @@ describe('shaping a path', () => {
     for (let k = 0.3; k <= 0.6; k += 0.02) expect(throughKnots([[0.3, 10], [0.6, 10]], k)).toBeLessThanOrEqual(10 + 1e-9);
     for (let k = 0; k <= 1; k += 0.02) expect(throughKnots([[0.2, 30], [0.5, -5]], k)).toBeLessThanOrEqual(30 + 1e-9);
   });
+
+  // The coach's complaint: three rings on a gentle curve, and the point went
+  // round a wide loop between them (up to 56 cm off), because each ring's arm
+  // reached a different way. Rings placed one after another, as the coach
+  // does, along a smooth bend must keep the whole path near that bend.
+  it('stays near the bend the rings lie on, between them too', () => {
+    const worst: number[] = [];
+    for (const [from, to] of [
+      ['extension', 'lunge'],
+      ['en-garde', 'parry-4'],
+      ['parry-6', 'parry-4'],
+      ['en-garde', 'lunge'],
+      ['parry-4', 'extension'],
+    ]) {
+      for (const off of [
+        [0, 0.2, 0.15],
+        [0, -0.25, 0],
+        [0, 0.1, -0.2],
+        [0, 0.3, 0.2],
+      ] as [number, number, number][]) {
+        let c = twoSteps(from, to);
+        const plain = c;
+        const want = Array.from({ length: 41 }, (_, i) =>
+          pathPoint(plain, 1, 'A', i / 40, (p) => frameAt(plain, p)).add(new Vector3(...off).multiplyScalar(Math.sin((Math.PI * i) / 40))),
+        );
+        const pins = [];
+        for (const at of [0.3, 0.5, 0.7]) {
+          pins.push(pinFor(c, 1, 'A', want[Math.round(at * 40)], at));
+          c = { ...c, steps: [c.steps[0], { ...c.steps[1], pins: { A: [...pins] } }] };
+        }
+        worst.push(Math.max(...tips(c, 'A', 40).map((tip) => Math.min(...want.map((w) => w.distanceTo(tip))))));
+      }
+    }
+    expect(Math.max(...worst)).toBeLessThan(0.12);
+    expect(worst.reduce((a, b) => a + b) / worst.length).toBeLessThan(0.035);
+  });
 });

@@ -7,7 +7,7 @@ import { Mannequin } from '../rig/Mannequin.tsx';
 import { CameraRig, type Flight } from '../scene/CameraRig.tsx';
 import { CameraDriver, Ticker } from '../scene/playback.tsx';
 import { Environment } from '../scene/Environment.tsx';
-import { measure, viewFor } from '../scene/measure.ts';
+import { measure, VIEW_NAMES, viewFor, type ViewName } from '../scene/measure.ts';
 import { ReadoutLines } from '../scene/Readouts.tsx';
 import { PointTrail } from '../scene/PointTrail.tsx';
 import { advance, frameAt, keyAt, keySteps, nextKey, prevKey } from './player.ts';
@@ -24,6 +24,11 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
   const [speed, setSpeed] = useState(1);
   const [flight, setFlight] = useState<Flight | null>(null);
   const flights = useRef(0);
+  // The coach's view for each step, or one the student picked (or turned to
+  // by hand), which then stays put while playing and stepping.
+  const [view, setView] = useState<'coach' | 'mine' | ViewName>('coach');
+  const [locked, setLocked] = useState(false);
+  const follow = view === 'coach';
 
   const frame = useMemo(() => frameAt(c, pos), [c, pos]);
   const key = keyAt(c, pos);
@@ -34,13 +39,20 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
   const m = useMemo(() => (display.distance ? measure(c, shown) : null), [display.distance, c, frame]); // eslint-disable-line react-hooks/exhaustive-deps
   const ghostOf = mode === 'steps' && display.ghost ? c.steps[keys[keyIndex - 1]] : undefined;
 
-  const flyTo = (index: number) => {
+  const flyTo = (index: number, always = false) => {
+    if (!follow && !always) return;
     const step = c.steps[index];
     setFlight({ camera: step.camera ?? viewFor('side', step), id: ++flights.current, save: false });
   };
 
   // Start from the first step's view.
-  useEffect(() => flyTo(keys[0]), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => flyTo(keys[0], true), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const chooseView = (to: 'coach' | ViewName) => {
+    setView(to);
+    if (to === 'coach') flyTo(key, true);
+    else setFlight({ camera: viewFor(to, shown), id: ++flights.current, save: false });
+  };
 
   const goTo = (index: number | undefined) => {
     if (index === undefined) return;
@@ -113,9 +125,17 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
           ))}
         {ghostOf && <PointTrail c={c} from={keys[keyIndex - 1]} to={key} />}
         {m && <ReadoutLines m={m} />}
-        <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} zoomToCursor />
+        <OrbitControls
+          target={[0, 0.9, 0]}
+          makeDefault
+          maxPolarAngle={Math.PI * 0.495}
+          zoomToCursor
+          enabled={!locked && !(playing && follow)}
+          // Turning the view by hand keeps it there.
+          onStart={() => setView('mine')}
+        />
         <CameraRig flight={flight} fitAspect />
-        {playing && <CameraDriver fit view={frame.camera ?? viewFor('side', shown)} />}
+        {playing && follow && <CameraDriver fit view={frame.camera ?? viewFor('side', shown)} />}
         <Ticker onTick={onTick} />
       </Canvas>
 
@@ -131,8 +151,22 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
               ))}
             </div>
           </div>
-          <button onClick={() => flyTo(key)} title="Back to this step's view">
-            Reset view
+          <select
+            aria-label="View"
+            value={view}
+            onChange={(e) => chooseView(e.target.value as 'coach' | ViewName)}
+            title="Coach’s view follows each step; any other stays put while it plays"
+          >
+            <option value="coach">Coach’s view</option>
+            {(Object.keys(VIEW_NAMES) as ViewName[]).map((v) => (
+              <option key={v} value={v}>
+                {VIEW_NAMES[v]}
+              </option>
+            ))}
+            {view === 'mine' && <option value="mine">Your view</option>}
+          </select>
+          <button aria-pressed={locked} className={locked ? 'on' : ''} onClick={() => setLocked(!locked)} title="Stop the view moving when you touch the screen">
+            {locked ? 'Unlock view' : 'Lock view'}
           </button>
         </div>
       </header>
