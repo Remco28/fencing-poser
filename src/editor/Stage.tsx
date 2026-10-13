@@ -198,7 +198,7 @@ export function Stage() {
             <strong>
               Path {s.stepIndex} → {s.stepIndex + 1}
             </strong>
-            <span>Drag a red path to bend it, in up to 3 places. Double-click a ring to remove it.</span>
+            <span>Drag the red path up, down or sideways (up to 3 rings). Double-click a ring to remove it.</span>
           </p>
           <button
             onClick={() => FENCERS.forEach((f) => (step.pins?.[f] || step.via?.[f] || step.bend?.[f]) && s.setPins(f, null))}
@@ -211,6 +211,11 @@ export function Stage() {
             Done
           </button>
         </div>
+      )}
+      {s.preview?.playing && (
+        <button className="stage-stop" onClick={s.stopPreview} title="Stop playing (Space or Esc)">
+          ■ Stop
+        </button>
       )}
       {!playing && !shaping && (
         <p className="camera-hint" aria-hidden>

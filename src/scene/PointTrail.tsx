@@ -5,7 +5,8 @@ import { FENCERS, HEADING, type Combination } from '../model/combination.ts';
 import { solveRig } from '../rig/kinematics.ts';
 import { frameAt } from '../viewer/player.ts';
 
-const SAMPLES_PER_STEP = 16;
+/** Enough that a tight bend reads as a curve, as it plays, not as a corner. */
+const SAMPLES_PER_STEP = 48;
 
 /**
  * The path each épée point takes from one step to another, passing through

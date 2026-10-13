@@ -16,6 +16,11 @@ export function StepBar() {
   const playing = !!s.preview;
   const running = !!s.preview?.playing;
   const shownIndex = s.preview ? keyAt(s.combination, s.preview.pos) : s.stepIndex;
+  const list = useRef<HTMLOListElement>(null);
+  // Play and the other buttons stay put; only the steps scroll, keeping the one shown in sight.
+  useEffect(() => {
+    list.current?.querySelector('.step-chip.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [shownIndex]);
 
   return (
     <nav className="step-bar" aria-label="Steps">
@@ -53,7 +58,7 @@ export function StepBar() {
         <button className="nav" onClick={() => s.goToStep(s.stepIndex - 1)} disabled={s.stepIndex === 0 || playing} title="Previous step (,)" aria-label="Previous step">
           ‹
         </button>
-        <ol>
+        <ol ref={list}>
           {steps.map((step, i) => (
             <li key={step.id}>
               {i > 0 && (

@@ -113,4 +113,9 @@ describe('shaping a path', () => {
       expect(spikiness(tips(shaped, 'A', 90)), JSON.stringify(offsets)).toBeLessThan(1.6);
     }
   });
+
+  it('never swings a joint past a pin and back', () => {
+    for (let k = 0.3; k <= 0.6; k += 0.02) expect(throughKnots([[0.3, 10], [0.6, 10]], k)).toBeLessThanOrEqual(10 + 1e-9);
+    for (let k = 0; k <= 1; k += 0.02) expect(throughKnots([[0.2, 30], [0.5, -5]], k)).toBeLessThanOrEqual(30 + 1e-9);
+  });
 });

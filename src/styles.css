@@ -348,6 +348,7 @@ textarea.wide {
   margin: 0;
   padding: 0;
   flex: 1;
+  min-width: 0;
   overflow-x: auto;
 }
 
@@ -1570,6 +1571,22 @@ button.switch.on .knob {
 
 .fencer-badge.on {
   background: var(--accent);
+}
+
+.stage-stop {
+  position: absolute;
+  left: 50%;
+  bottom: 112px;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px #0003;
 }
 
 .camera-hint {

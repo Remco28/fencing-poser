@@ -47,6 +47,8 @@ Every decision that shapes the app, newest first within each group, with the rea
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-13 | Pins move only up/down and across the piste, never along it (how far along comes from the movement). The spline's slopes are limited so a joint never swings past a pin (no hooks past a ring), and the trail is drawn with 48 samples a step. A press within 18 px of a ring takes the ring. | The coach found the path hard to control: a drag in a 3D view also moved the point toward or away from the camera, the trail showed corners and hooks the video did not. |
+| 2026-10-13 | A large Stop button floats over the stage while playing; Play/Stop stays in view however many steps there are (only the steps scroll). | With many steps the step bar scrolled Play out of sight, leaving only "click a step" to stop. |
 | 2026-10-13 | Camera: drag turns, right-drag pans, scroll zooms toward the pointer; a one-line hint says so at the stage's bottom right. Space+drag was tried and removed. | The coach had not found right-drag. Space+drag competed with Space for Play. |
 | 2026-10-13 | The camera toolbar is grouped by fencer: Side, Overhead, Fit both, then an A group and a B group (Behind, Zoom), each with the fencer's badge. | "Behind A" and "Zoom to A" sat apart, and Zoom followed whoever was being posed. |
 | 2026-10-13 | Motion guides show their key letters only for the movement in use (just nudged, or its row pointed at in the joint controls). | All six letters on a small joint (the spine) were cluttered; the joint controls already show the keys. |

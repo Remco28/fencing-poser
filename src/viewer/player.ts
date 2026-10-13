@@ -81,8 +81,10 @@ export function pinsOf(step: Step, f: FencerId): Pin[] {
 
 /**
  * A smooth curve through (0, 0), each knot, and (1, 0): a cubic Hermite
- * spline with Catmull-Rom slopes and parabolic ends. One knot halfway gives
- * the parabola 4k(1-k), so a single pin eases in and out symmetrically.
+ * spline with parabolic ends, whose slopes are limited so it never swings
+ * past a knot (monotone, after Fritsch and Carlson): a joint turns to a pin
+ * and no further, so the point does not overshoot a ring and hook back. One
+ * knot halfway gives the parabola 4k(1-k).
  */
 export function throughKnots(knots: [number, number][], x: number): number {
   const pts: [number, number][] = [[0, 0], ...knots, [1, 0]];
@@ -90,8 +92,12 @@ export function throughKnots(knots: [number, number][], x: number): number {
   if (n === 2) return 0;
   const secant = (i: number) => (pts[i + 1][1] - pts[i][1]) / (pts[i + 1][0] - pts[i][0]);
   const m = pts.map((_, i) => (i === 0 || i === n - 1 ? 0 : (pts[i + 1][1] - pts[i - 1][1]) / (pts[i + 1][0] - pts[i - 1][0])));
-  m[0] = 2 * secant(0) - m[1];
-  m[n - 1] = 2 * secant(n - 2) - m[n - 2];
+  /** No slope where the curve turns back; never steeper than three times either side. */
+  const limit = (slope: number, ...sides: number[]) =>
+    sides.some((s) => s === 0 || Math.sign(s) !== Math.sign(slope)) ? 0 : Math.sign(slope) * Math.min(Math.abs(slope), ...sides.map((s) => 3 * Math.abs(s)));
+  for (let i = 1; i < n - 1; i++) m[i] = limit(m[i], secant(i - 1), secant(i));
+  m[0] = limit(2 * secant(0) - m[1], secant(0));
+  m[n - 1] = limit(2 * secant(n - 2) - m[n - 2], secant(n - 2));
   let i = 0;
   while (i < n - 2 && x > pts[i + 1][0]) i++;
   const h = pts[i + 1][0] - pts[i][0];

@@ -50,8 +50,9 @@ function useRingTexture() {
  */
 export function PathHandles({ c, to }: { c: Combination; to: number }) {
   const camera = useThree((s) => s.camera);
+  const size = useThree((s) => s.size);
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
-  const drag = useRef<{ f: FencerId; plane: Plane; id: number; at: number; others: Pin[] } | null>(null);
+  const drag = useRef<{ f: FencerId; plane: Plane; x: number; id: number; at: number; others: Pin[] } | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const ring = useRingTexture();
 
@@ -76,11 +77,19 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
     (e.target as unknown as Element).setPointerCapture(e.pointerId);
     const pins = paths.find((p) => p.f === f)!.pins;
     const others = pins.filter((p) => p.at !== at);
+    // A pin moves up and down and across the piste, never along it: how far
+    // along the piste the point is comes from the movement itself. Looking
+    // along the piste (from behind, or at an angle), the drag follows the
+    // cursor across that upright plane; side on, where that plane is seen
+    // edge on, it follows the cursor up and down.
+    const look = camera.getWorldDirection(new Vector3());
+    const across = Math.abs(look.x) > 0.35;
     drag.current = {
       f,
       at,
       others,
-      plane: new Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new Vector3()), point),
+      x: point.x,
+      plane: new Plane().setFromNormalAndCoplanarPoint(across ? new Vector3(1, 0, 0) : look, point),
       id: ++dragCount,
     };
     if (controls) controls.enabled = false;
@@ -88,7 +97,15 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
 
   /** Grabbing the path: the nearest ring if close, else a new pin there (or, when full, the nearest ring moves there). */
   const grabPath = (f: FencerId) => (e: ThreeEvent<PointerEvent>) => {
-    const { points, pins } = paths.find((p) => p.f === f)!;
+    const { points, pins, rings } = paths.find((p) => p.f === f)!;
+    // A press on (or just by) a ring takes that ring, whatever part of the path lies under it.
+    const onScreen = (p: Vector3) => {
+      const v = p.clone().project(camera);
+      return new Vector3(((v.x + 1) / 2) * size.width, ((1 - v.y) / 2) * size.height, 0);
+    };
+    const pressed = new Vector3(e.offsetX, e.offsetY, 0);
+    const ringHit = rings.find((r) => onScreen(r.point).distanceTo(pressed) < 18);
+    if (ringHit) return begin(f, ringHit.at, ringHit.point, e);
     let best = 0;
     points.forEach((p, i) => {
       if (p.distanceTo(e.point) < points[best].distanceTo(e.point)) best = i;
@@ -110,6 +127,7 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
     e.stopPropagation();
     const target = e.ray.intersectPlane(d.plane, new Vector3());
     if (!target) return;
+    target.x = d.x;
     const s = useEditor.getState();
     s.setPins(d.f, [...d.others, pinFor(s.combination, to, d.f, target, d.at)], d.id);
   };
