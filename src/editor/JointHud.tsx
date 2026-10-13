@@ -5,9 +5,11 @@ import { JOINT_BY_NAME } from '../model/joints.ts';
 import { HEADING } from '../model/combination.ts';
 import { angle } from '../model/types.ts';
 import { solveRig, thumbClock } from '../rig/kinematics.ts';
-import { NUDGE_KEYS, STEP } from './keyboard.ts';
+import { MOVE, NUDGE_KEYS, STEP } from './keyboard.ts';
+import { formatDistance } from '../model/units.ts';
+import { Switch } from '../ui/Switch.tsx';
 import { GUIDE_COLORS } from './MotionGuides.tsx';
-import { activePose, useEditor } from './store.ts';
+import { activePose, spineAngle, useEditor } from './store.ts';
 
 /** Gap between the fencer and the controls, in pixels. */
 const GAP = 24;
@@ -93,20 +95,30 @@ export function JointHud({ el }: { el: RefObject<HTMLDivElement | null> }) {
   const weaponSide = setup.handedness === 'right' ? 'r' : 'l';
   const handSide = joint.name === 'grip' ? weaponSide : joint.name === 'wrist_r' ? 'r' : joint.name === 'wrist_l' ? 'l' : null;
   const clock = handSide && thumbClock(solveRig(setup, pose, HEADING[s.active]), handSide, handSide === weaponSide);
+  const spine = joint.name === 'abdomen' || joint.name === 'chest';
+  const together = spine && s.spineTogether;
+  const valueOf = (key: string) => (together ? spineAngle(pose, key) : angle(pose, joint.name, key));
+  const limitsOf = (d: (typeof joint.dofs)[number]) => {
+    if (!together) return [d.min, d.max];
+    const other = JOINT_BY_NAME[joint.name === 'abdomen' ? 'chest' : 'abdomen'].dofs.find((o) => o.key === d.key)!;
+    return [d.min + other.min, d.max + other.max];
+  };
+  const move = s.held.shift ? MOVE.big : s.held.alt ? MOVE.fine : MOVE.normal;
 
   return (
     <div ref={el} className="joint-hud" role="group" aria-label={`${joint.label} controls`}>
       <div className="hud-head">
         <strong>
-          {s.active} · {joint.label}
+          {s.active} · {together ? 'Whole spine' : joint.label}
         </strong>
         <button className="link" onClick={() => s.select(null)} aria-label="Close" title="Deselect (Esc)">
           ×
         </button>
       </div>
       {joint.dofs.map((d, i) => {
-        const value = angle(pose, joint.name, d.key);
-        const atLimit = value <= d.min + 0.01 || value >= d.max - 0.01;
+        const value = valueOf(d.key);
+        const [min, max] = limitsOf(d);
+        const atLimit = value <= min + 0.01 || value >= max - 0.01;
         // Labels read "increase / decrease" ("Forward / back"): ▶ is the first, ◀ the second.
         const [more, less] = d.label.split(' / ');
         return (
@@ -132,9 +144,12 @@ export function JointHud({ el }: { el: RefObject<HTMLDivElement | null> }) {
               ) : (
                 <span className="hud-dirs single">{more}</span>
               )}
-              <output className={atLimit ? 'limit' : ''} title={atLimit ? 'At the end of its range' : undefined}>
-                {Math.round(value * 2) / 2}°
-              </output>
+              <EditableAngle
+                value={value}
+                limit={atLimit}
+                label={d.label}
+                onSet={(v) => s.setAngle(joint.name, d.key, v)}
+              />
             </span>
             <button
               onClick={(e) => s.nudge(i, e.shiftKey ? STEP.big : e.altKey ? STEP.fine : step)}
@@ -146,6 +161,32 @@ export function JointHud({ el }: { el: RefObject<HTMLDivElement | null> }) {
           </div>
         );
       })}
+      {joint.name === 'pelvis' && (
+        <div className="hud-row" title="Step back or forward along the piste">
+          <kbd>[</kbd>
+          <button onClick={(e) => s.advance(-(e.shiftKey ? MOVE.big : e.altKey ? MOVE.fine : move))} title="Step back ([)">
+            ◀
+          </button>
+          <span className="hud-label">
+            <span className="hud-dirs">
+              <span>back</span>
+              <span>Forward</span>
+            </span>
+            <output>{formatDistance(pose.root.x, s.units)}</output>
+          </span>
+          <button onClick={(e) => s.advance(e.shiftKey ? MOVE.big : e.altKey ? MOVE.fine : move)} title="Step forward (])">
+            ▶
+          </button>
+          <kbd>]</kbd>
+        </div>
+      )}
+      {spine && (
+        <div className="hud-switch">
+          <Switch on={s.spineTogether} onToggle={s.toggleSpineTogether} title="Bend stomach and chest together, or one at a time">
+            Bend the whole spine
+          </Switch>
+        </div>
+      )}
       {clock && (
         <p className="hud-clock" title="Seen from behind the hand, looking toward the point">
           Thumb at <strong>{clock.hour} o’clock</strong>
@@ -161,8 +202,47 @@ export function JointHud({ el }: { el: RefObject<HTMLDivElement | null> }) {
         </span>
       </p>
       <p className="hud-more">
-        <kbd>Tab</kbd> next joint · <kbd>X</kbd> other side · <kbd>R</kbd> straighten
+        <kbd>Tab</kbd> next joint · <kbd>X</kbd> other side ·{' '}
+        <button className="link" onClick={() => s.resetJoint(joint.name)} title="Straighten this joint (R)">
+          <kbd>R</kbd> straighten
+        </button>
       </p>
     </div>
+  );
+}
+
+/** An angle that can be clicked and typed over. */
+function EditableAngle(props: { value: number; limit: boolean; label: string; onSet: (value: number) => void }) {
+  const [editing, setEditing] = useState(false);
+  const shown = Math.round(props.value * 2) / 2;
+  if (editing) {
+    return (
+      <input
+        className="hud-input"
+        autoFocus
+        type="number"
+        step={0.5}
+        defaultValue={shown}
+        aria-label={`${props.label}, degrees`}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          if (e.key === 'Escape') setEditing(false);
+        }}
+        onBlur={(e) => {
+          const v = Number(e.currentTarget.value);
+          if (e.currentTarget.value !== '' && Number.isFinite(v)) props.onSet(v);
+          setEditing(false);
+        }}
+      />
+    );
+  }
+  return (
+    <button
+      className={`hud-value${props.limit ? ' limit' : ''}`}
+      onClick={() => setEditing(true)}
+      title={props.limit ? 'At the end of its range. Click to type an angle.' : 'Click to type an angle'}
+    >
+      {shown}°
+    </button>
   );
 }

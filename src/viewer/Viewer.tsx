@@ -9,6 +9,7 @@ import { CameraDriver, Ticker } from '../scene/playback.tsx';
 import { Environment } from '../scene/Environment.tsx';
 import { measure, viewFor } from '../scene/measure.ts';
 import { ReadoutLines } from '../scene/Readouts.tsx';
+import { PointTrail } from '../scene/PointTrail.tsx';
 import { advance, frameAt, keyAt, keySteps, nextKey, prevKey } from './player.ts';
 
 type Mode = 'steps' | 'smooth';
@@ -110,6 +111,7 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
           FENCERS.map((f) => (
             <Mannequin key={`ghost-${f}-${ghostOf.id}`} ghost setup={c.fencers[f]} pose={ghostOf.poses[f]} heading={HEADING[f]} />
           ))}
+        {ghostOf && <PointTrail c={c} from={keys[keyIndex - 1]} to={key} />}
         {m && <ReadoutLines m={m} />}
         <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} />
         <CameraRig flight={flight} fitAspect />

@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { FENCERS, TARGET_NAMES, type FencerId, type TargetArea } from '../model/combination.ts';
-import { JOINT_BY_NAME, JOINTS, type JointName } from '../model/joints.ts';
-import { angle } from '../model/types.ts';
 import { formatDistance, formatHeight } from '../model/units.ts';
 import { Toggle } from '../ui/Toggle.tsx';
-import { NUDGE_LABELS, STEP } from './keyboard.ts';
+import { STEP } from './keyboard.ts';
 import { PresetsPanel } from './PresetsPanel.tsx';
-import { activePose, currentStep, useEditor } from './store.ts';
+import { currentStep, useEditor } from './store.ts';
 
 type Tab = 'pose' | 'step' | 'fencers' | 'help';
 
@@ -99,76 +97,17 @@ export function Panel({ onOpenLibrary, onShare }: { onOpenLibrary: () => void; o
 }
 
 function PoseTab() {
-  const s = useEditor();
-  const pose = activePose(s);
-  const joint = s.selected ? JOINT_BY_NAME[s.selected] : null;
   return (
     <>
       <section>
         <p className="hint">
           Drag a handle (<span className="dot hand" /> hand, <span className="dot point" /> point, <span className="dot foot" />{' '}
-          foot, <span className="dot hips" /> hips), or click a body part and use the keys shown beside it.
+          foot, <span className="dot hips" /> hips), or click a body part (or press <kbd>Tab</kbd>) and use the controls
+          beside it. Click the hips to step along the piste.
         </p>
         <PresetsPanel />
       </section>
       <BladesSection />
-      <section>
-        <h2>Joint</h2>
-        <select value={s.selected ?? ''} onChange={(e) => s.select((e.target.value || null) as JointName | null)}>
-          <option value="">Choose a joint…</option>
-          {JOINTS.map((j) => (
-            <option key={j.name} value={j.name}>
-              {j.label}
-            </option>
-          ))}
-        </select>
-        {joint && (
-          <div className="dofs">
-            {joint.dofs.map((d, i) => {
-              const value = angle(pose, joint.name, d.key);
-              return (
-                <label key={d.key} className="dof">
-                  <span className="dof-head">
-                    <span>
-                      {d.label} <kbd>{NUDGE_LABELS[i]}</kbd>
-                    </span>
-                    <output>{Math.round(value)}°</output>
-                  </span>
-                  <input
-                    type="range"
-                    aria-label={`${joint.label}: ${d.label}`}
-                    min={d.min}
-                    max={d.max}
-                    step={1}
-                    value={value}
-                    onChange={(e) => s.setAngle(joint.name, d.key, Number(e.target.value))}
-                  />
-                </label>
-              );
-            })}
-            <button className="quiet" onClick={() => s.resetJoint(joint.name)}>
-              Straighten this joint <kbd>R</kbd>
-            </button>
-          </div>
-        )}
-        <label className="dof">
-          <span className="dof-head">
-            <span>
-              {s.active}’s position on the piste <kbd>[ ]</kbd>
-            </span>
-            <output>{formatDistance(pose.root.x, s.units)}</output>
-          </span>
-          <input
-            type="range"
-            aria-label="Position on the piste"
-            min={-8.5}
-            max={8.5}
-            step={0.01}
-            value={pose.root.x}
-            onChange={(e) => s.setPosition(Number(e.target.value))}
-          />
-        </label>
-      </section>
     </>
   );
 }

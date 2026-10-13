@@ -68,7 +68,8 @@ interface Guide {
   dofIndex: number;
 }
 
-export function guidesFor(setup: FencerSetup, pose: Pose, heading: number, joint: JointName): Guide[] {
+export function guidesFor(setup: FencerSetup, pose: Pose, heading: number, joint: JointName, spineTogether = false): Guide[] {
+  const together = spineTogether && (joint === 'abdomen' || joint === 'chest');
   return JOINT_BY_NAME[joint].dofs.flatMap((d, dofIndex) => {
     if (SHOWN_ON_DIAL.has(`${joint}.${d.key}`)) return [];
     const now = angle(pose, joint, d.key);
@@ -77,7 +78,16 @@ export function guidesFor(setup: FencerSetup, pose: Pose, heading: number, joint
     const points: Vector3[] = [];
     for (let i = 0; i <= SAMPLES; i++) {
       const value = lo + ((hi - lo) * i) / SAMPLES;
-      const p = { ...pose, joints: { ...pose.joints, [joint]: { ...pose.joints[joint], [d.key]: value } } };
+      const p = together
+        ? {
+            ...pose,
+            joints: {
+              ...pose.joints,
+              abdomen: { ...pose.joints.abdomen, [d.key]: clampDof('abdomen', d.key, angle(pose, 'abdomen', d.key) + (value - now) * 0.55) },
+              chest: { ...pose.joints.chest, [d.key]: clampDof('chest', d.key, angle(pose, 'chest', d.key) + (value - now) * 0.45) },
+            },
+          }
+        : { ...pose, joints: { ...pose.joints, [joint]: { ...pose.joints[joint], [d.key]: value } } };
       points.push(tracer(solveRig(setup, p, heading), joint));
     }
     const current = hi > lo ? Math.round(((now - lo) / (hi - lo)) * SAMPLES) : 0;

@@ -137,3 +137,31 @@ describe('partial presets', () => {
     expect(pose().joints.elbow_r).toEqual(lunge.pose.joints.elbow_r);
   });
 });
+
+describe('whole spine', () => {
+  it('bends stomach and chest together by default, sharing the angle', () => {
+    state().select('chest');
+    const before = { a: angle(pose(), 'abdomen', 'flex'), c: angle(pose(), 'chest', 'flex') };
+    state().nudge(0, 10);
+    const da = angle(pose(), 'abdomen', 'flex') - before.a;
+    const dc = angle(pose(), 'chest', 'flex') - before.c;
+    expect(da + dc).toBeCloseTo(10);
+    expect(da).toBeGreaterThan(0);
+    expect(dc).toBeGreaterThan(0);
+  });
+
+  it('types a whole-spine angle as the total of both', async () => {
+    const { spineAngle } = await import('./store.ts');
+    state().setAngle('abdomen', 'flex', 30);
+    expect(spineAngle(pose(), 'flex')).toBeCloseTo(30);
+  });
+
+  it('moves one joint alone when the switch is off', () => {
+    state().toggleSpineTogether();
+    state().select('chest');
+    const a = angle(pose(), 'abdomen', 'flex');
+    state().nudge(0, 10);
+    expect(angle(pose(), 'abdomen', 'flex')).toBe(a);
+    state().toggleSpineTogether();
+  });
+});

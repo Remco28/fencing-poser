@@ -15,6 +15,7 @@ import { ThumbDial } from './ThumbDial.tsx';
 import { measure, rigsFor, VIEW_NAMES, viewFor, type ViewName } from '../scene/measure.ts';
 import { Environment } from '../scene/Environment.tsx';
 import { ReadoutLines } from '../scene/Readouts.tsx';
+import { PointTrail } from '../scene/PointTrail.tsx';
 import { BalanceMark } from '../scene/BalanceMark.tsx';
 import { balanceOf } from '../rig/balance.ts';
 import { formatDistance } from '../model/units.ts';
@@ -42,7 +43,13 @@ export function Stage() {
   const playing = !!s.preview;
   const frame = useMemo(() => (s.preview ? frameAt(s.combination, s.preview.pos) : null), [s.preview, s.combination]);
   const step = s.preview ? { ...s.combination.steps[keyAt(s.combination, s.preview.pos)], poses: frame!.poses } : editingStep;
-  const previous = !playing && s.stepIndex > 0 ? s.combination.steps[s.stepIndex - 1] : null;
+  // The step before: the last real (not motion-only) one, so the ghost and the
+  // point trail cover the whole move, via steps included.
+  const previousIndex = (() => {
+    for (let i = s.stepIndex - 1; i >= 0; i--) if (!s.combination.steps[i].motionOnly) return i;
+    return s.stepIndex - 1;
+  })();
+  const previous = !playing && previousIndex >= 0 ? s.combination.steps[previousIndex] : null;
   const display = step.display ?? {};
   const m = useMemo(() => (display.distance ? measure(s.combination, step) : null), [display.distance, s.combination, step]);
   // Off-balance warnings, for poses the coach makes (not while playing).
@@ -75,8 +82,9 @@ export function Stage() {
   const dialSide = s.selected === 'grip' ? weaponSide : s.selected === 'wrist_r' ? 'r' : s.selected === 'wrist_l' ? 'l' : null;
 
   const guides = useMemo(
-    () => (s.selected ? guidesFor(s.combination.fencers[s.active], step.poses[s.active], HEADING[s.active], s.selected) : []),
-    [s.selected, s.active, s.combination.fencers, step],
+    () =>
+      s.selected ? guidesFor(s.combination.fencers[s.active], step.poses[s.active], HEADING[s.active], s.selected, s.spineTogether) : [],
+    [s.selected, s.active, s.combination.fencers, step, s.spineTogether],
   );
   // The controls keep clear of the whole fencer being posed and of the guides.
   const hudAvoid = useMemo(
@@ -138,6 +146,7 @@ export function Stage() {
               heading={HEADING[f]}
             />
           ))}
+        {display.ghost && previous && <PointTrail c={s.combination} from={previousIndex} to={s.stepIndex} />}
         {m && <ReadoutLines m={m} />}
         {balances.map(({ f, b }) => (
           <BalanceMark key={f} balance={b} />
@@ -200,7 +209,11 @@ export function Stage() {
             on={!!display.ghost}
             onToggle={() => s.setDisplay({ ghost: !display.ghost })}
             disabled={!previous && !display.ghost}
-            title={s.stepIndex > 0 ? 'Show the previous step faintly, for this step' : 'The first step has nothing before it'}
+            title={
+              s.stepIndex > 0
+                ? 'Show the previous step faintly, and the path of each point since then'
+                : 'The first step has nothing before it'
+            }
           >
             Ghost
           </Switch>

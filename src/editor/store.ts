@@ -78,6 +78,9 @@ interface EditorState extends Snapshot {
   nudge: (dofIndex: number, delta: number) => void;
   /** Replace the active fencer's pose during one drag; a whole drag undoes as one step. */
   dragPose: (pose: Pose, dragId: number) => void;
+  /** Stomach and chest bend as one spine (the default) or separately. */
+  spineTogether: boolean;
+  toggleSpineTogether: () => void;
   /** The movement last nudged (from a key or a button), so the controls can light it up. */
   lastNudge: { dofIndex: number; id: number } | null;
   /** Modifier keys currently held, shown in the controls. */
@@ -88,11 +91,19 @@ interface EditorState extends Snapshot {
   toggleCameraLock: () => void;
   /** Turn "one view for all steps" on (every step takes this step's view) or off. */
   toggleSharedView: () => void;
-  /** Playing the combination smoothly inside the editor; null when not. */
-  preview: { pos: number } | null;
+  /**
+   * Playing the combination smoothly inside the editor, or paused at a point
+   * between steps while scrubbing; null when editing.
+   */
+  preview: { pos: number; playing: boolean } | null;
   startPreview: () => void;
   stopPreview: () => void;
   tickPreview: (ms: number) => void;
+  /** Show the moment at `pos` (in steps, 1.5 = halfway from step 2 to 3), paused. */
+  scrubTo: (pos: number) => void;
+  /** Play round and round instead of stopping at the end. */
+  loop: boolean;
+  toggleLoop: () => void;
   /** Whether the A / B tags show above the fencers. */
   showLabels: boolean;
   toggleLabels: () => void;
@@ -229,6 +240,24 @@ function moved(s: EditorState, pose: Pose): Combination {
   return withStep(s, (st) => ({ ...st, poses: after }));
 }
 
+/** Is this joint being moved as part of the whole spine? */
+function spineJoint(s: EditorState, joint: JointName): boolean {
+  return s.spineTogether && (joint === 'abdomen' || joint === 'chest');
+}
+
+/** The whole spine's angle for a movement: stomach and chest together. */
+export function spineAngle(pose: Pose, dof: string): number {
+  return angle(pose, 'abdomen', dof) + angle(pose, 'chest', dof);
+}
+
+/** Bend the whole spine by `delta`, shared between stomach and chest, each within its limits. */
+function bendSpine(pose: Pose, dof: string, delta: number): Pose {
+  const lower = withAngle(pose, 'abdomen', dof, angle(pose, 'abdomen', dof) + delta * 0.55);
+  // Whatever the stomach could not take (at its limit), the chest takes.
+  const taken = angle(lower, 'abdomen', dof) - angle(pose, 'abdomen', dof);
+  return withAngle(lower, 'chest', dof, angle(lower, 'chest', dof) + (delta - taken));
+}
+
 function withAngle(pose: Pose, joint: JointName, dof: string, value: number): Pose {
   return {
     ...pose,
@@ -302,12 +331,23 @@ export const useEditor = create<EditorState>((set, get) => {
     selectOpposite: () => set(({ selected }) => ({ selected: selected && oppositeJoint(selected) })),
 
     setAngle: (joint, dof, value) =>
-      set((s) => edit(s, { combination: moved(s, withAngle(activePose(s), joint, dof, value)) }, `${s.active}.${joint}.${dof}`)),
+      set((s) => {
+        const pose = activePose(s);
+        const next = spineJoint(s, joint)
+          ? bendSpine(pose, dof, value - spineAngle(pose, dof))
+          : withAngle(pose, joint, dof, value);
+        return edit(s, { combination: moved(s, next) }, `${s.active}.${joint}.${dof}`);
+      }),
+    spineTogether: true,
+    toggleSpineTogether: () => set((s) => ({ spineTogether: !s.spineTogether })),
     nudge: (dofIndex, delta) =>
       set((s) => {
         const dof = s.selected && JOINT_BY_NAME[s.selected].dofs[dofIndex];
         if (!s.selected || !dof) return {};
-        const pose = withAngle(activePose(s), s.selected, dof.key, angle(activePose(s), s.selected, dof.key) + delta);
+        const current = activePose(s);
+        const pose = spineJoint(s, s.selected)
+          ? bendSpine(current, dof.key, delta)
+          : withAngle(current, s.selected, dof.key, angle(current, s.selected, dof.key) + delta);
         return {
           ...edit(s, { combination: moved(s, pose) }, `${s.active}.${s.selected}.${dof.key}`),
           lastNudge: { dofIndex, id: (s.lastNudge?.id ?? 0) + 1 },
@@ -329,17 +369,22 @@ export const useEditor = create<EditorState>((set, get) => {
     startPreview: () =>
       set((s) => {
         const last = s.combination.steps.length - 1;
-        return { preview: { pos: s.stepIndex >= last ? 0 : s.stepIndex }, selected: null };
+        const from = s.preview ? s.preview.pos : s.stepIndex;
+        return { preview: { pos: from >= last - 1e-6 ? 0 : from, playing: true }, selected: null };
       }),
+    scrubTo: (pos) => set({ preview: { pos, playing: false }, selected: null }),
+    loop: false,
+    toggleLoop: () => set((s) => ({ loop: !s.loop })),
     stopPreview: () =>
       set((s) => (s.preview ? { preview: null, stepIndex: keyAt(s.combination, s.preview.pos) } : {})),
     tickPreview: (ms) =>
       set((s) => {
-        if (!s.preview) return {};
+        if (!s.preview?.playing) return {};
         const end = s.combination.steps.length - 1;
         const pos = advance(s.combination, s.preview.pos, ms, end);
-        // At the end, stop on the last step.
-        return pos >= end ? { preview: null, stepIndex: end } : { preview: { pos } };
+        if (pos < end) return { preview: { pos, playing: true } };
+        // At the end: round again, or stop on the last step.
+        return s.loop ? { preview: { pos: 0, playing: true } } : { preview: null, stepIndex: end };
       }),
     showLabels: rememberedLabels(),
     toggleLabels: () =>
