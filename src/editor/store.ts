@@ -96,6 +96,9 @@ interface EditorState extends Snapshot {
   /** Modifier keys currently held, shown in the controls. */
   held: { shift: boolean; alt: boolean };
   setHeld: (held: { shift: boolean; alt: boolean }) => void;
+  /** Space is held: dragging slides the view instead of turning it or grabbing a handle. */
+  panning: boolean;
+  setPanning: (on: boolean) => void;
   /** Locked: the camera cannot be orbited, panned or zoomed by hand. */
   cameraLocked: boolean;
   toggleCameraLock: () => void;
@@ -391,6 +394,8 @@ export const useEditor = create<EditorState>((set, get) => {
     lastNudge: null,
     held: { shift: false, alt: false },
     setHeld: (held) => set((s) => (s.held.shift === held.shift && s.held.alt === held.alt ? {} : { held })),
+    panning: false,
+    setPanning: (on) => set((s) => (s.panning === on ? {} : { panning: on })),
     cameraLocked: false,
     toggleCameraLock: () => set((s) => ({ cameraLocked: !s.cameraLocked })),
     toggleSharedView: () =>

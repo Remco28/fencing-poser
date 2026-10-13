@@ -1520,32 +1520,62 @@ button.switch.on .knob {
 
 .path-banner {
   position: absolute;
-  left: 50%;
-  top: 92px;
-  transform: translateX(-50%);
-  width: min(560px, calc(100% - 32px));
+  left: 16px;
+  bottom: 112px;
   z-index: 6;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
-  padding: 10px 14px;
+  max-width: calc(100% - 32px);
+  padding: 6px 6px 6px 12px;
   background: #fff;
   border: 1px solid #f0b8bf;
   border-left: 4px solid #d0263a;
   border-radius: 10px;
-  box-shadow: 0 6px 20px #0002;
+  box-shadow: 0 4px 14px #0002;
   font-size: 13px;
-  line-height: 1.45;
 }
 
 .path-banner p {
-  margin: 0;
-  flex: 1;
+  margin: 0 4px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
 }
 
-.path-banner .buttons {
-  flex-direction: column;
-  flex-wrap: nowrap;
+.path-banner strong {
+  color: #b4202f;
+}
+
+.stage.panning canvas {
+  cursor: grab;
+}
+
+.stage.panning canvas:active {
+  cursor: grabbing;
+}
+
+.camera-hint {
+  position: absolute;
+  right: 16px;
+  bottom: 112px;
+  margin: 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #ffffffb3;
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.camera-hint kbd {
+  font-size: 11px;
+}
+
+@media (max-width: 700px) {
+  .camera-hint {
+    display: none;
+  }
 }
 
 .step-bar ol li {

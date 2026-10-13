@@ -113,7 +113,7 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
           ))}
         {ghostOf && <PointTrail c={c} from={keys[keyIndex - 1]} to={key} />}
         {m && <ReadoutLines m={m} />}
-        <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} />
+        <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} zoomToCursor />
         <CameraRig flight={flight} fitAspect />
         {playing && <CameraDriver fit view={frame.camera ?? viewFor('side', shown)} />}
         <Ticker onTick={onTick} />

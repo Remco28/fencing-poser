@@ -41,6 +41,7 @@ export function Handles({ setup, pose, heading }: { setup: FencerSetup; pose: Po
   const [hover, setHover] = useState<Handle | null>(null);
 
   const start = (handle: Handle) => (e: ThreeEvent<PointerEvent>) => {
+    if (useEditor.getState().panning) return; // Space+drag slides the view instead
     e.stopPropagation();
     (e.target as unknown as Element).setPointerCapture(e.pointerId);
     const normal = camera.getWorldDirection(new Vector3());

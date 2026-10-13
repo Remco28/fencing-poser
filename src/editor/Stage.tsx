@@ -1,7 +1,7 @@
 import { OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
-import { Vector3 } from 'three';
+import { MOUSE, Vector3 } from 'three';
 import { Handles } from '../ik/Handles.tsx';
 import { FENCERS, HEADING, targetParts } from '../model/combination.ts';
 import { Mannequin } from '../rig/Mannequin.tsx';
@@ -36,6 +36,10 @@ const VIEWS: Record<string, [number, number, number]> = {
   nearfront: [2.6, 1.3, 0.6],
 };
 const START = VIEWS[new URLSearchParams(location.search).get('view') ?? ''] ?? [0.6, 2.8, 8.4];
+
+/** Left-drag turns the view, right-drag slides it; with Space held, left-drag slides too. */
+const TURN_BUTTONS = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+const SLIDE_BUTTONS = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
 
 export function Stage() {
   const s = useEditor();
@@ -169,7 +173,14 @@ export function Stage() {
         {s.handles && !s.selected && !playing && !shaping && (
           <Handles setup={s.combination.fencers[s.active]} pose={step.poses[s.active]} heading={HEADING[s.active]} />
         )}
-        <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} enabled={!s.cameraLocked && !playing} />
+        <OrbitControls
+          target={[0, 0.9, 0]}
+          makeDefault
+          maxPolarAngle={Math.PI * 0.495}
+          enabled={!s.cameraLocked && !playing}
+          zoomToCursor
+          mouseButtons={s.panning ? SLIDE_BUTTONS : TURN_BUTTONS}
+        />
         {playing && <Ticker onTick={s.tickPreview} />}
         {playing && <CameraDriver view={frame?.camera ?? viewFor('side', step)} />}
         <CameraRig flight={s.flight} onView={s.setStepCamera} />
@@ -190,24 +201,32 @@ export function Stage() {
         <div className="path-banner" role="status">
           <p>
             <strong>
-              Shaping the movement from step {s.stepIndex} to step {s.stepIndex + 1}.
-            </strong>{' '}
-            Drag a ringed ball in the middle of a point’s red path to bend it, e.g. under the opponent’s blade. The poses at
-            both steps stay as they are. Press Play to watch it.
+              Path {s.stepIndex} → {s.stepIndex + 1}
+            </strong>
+            <span>Drag a ringed ball to bend that point’s path.</span>
           </p>
-          <div className="buttons">
-            <button
-              onClick={() => FENCERS.forEach((f) => (step.via?.[f] || step.bend?.[f]) && s.setBend(f, null))}
-              disabled={!step.via && !step.bend}
-              title="Back to the plain, direct movement"
-            >
-              Straighten paths
-            </button>
-            <button className="primary" onClick={s.exitPath} title="Back to posing (Esc)">
-              Done
-            </button>
-          </div>
+          <button
+            onClick={() => FENCERS.forEach((f) => (step.via?.[f] || step.bend?.[f]) && s.setBend(f, null))}
+            disabled={!step.via && !step.bend}
+            title="Back to the plain, direct movement. The poses at both steps never change."
+          >
+            Straighten
+          </button>
+          <button className="primary" onClick={s.exitPath} title="Back to posing (Esc)">
+            Done
+          </button>
         </div>
+      )}
+      {!playing && !shaping && (
+        <p className="camera-hint" aria-hidden>
+          {s.cameraLocked ? (
+            <>View locked · <kbd>L</kbd> unlocks</>
+          ) : (
+            <>
+              Drag: turn · <kbd>Space</kbd>+drag or right-drag: slide · Scroll: zoom
+            </>
+          )}
+        </p>
       )}
 
       <div className="stage-tools" aria-hidden={playing || undefined}>

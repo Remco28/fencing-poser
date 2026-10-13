@@ -47,6 +47,8 @@ Every decision that shapes the app, newest first within each group, with the rea
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-13 | Free camera: drag turns, Space+drag or right-drag slides, scroll zooms toward the pointer. A tap of Space still plays (on release). A one-line hint sits at the stage's bottom right. | The coach found the preset views and zoom buttons too limiting and had not found right-drag; Space+drag is what drawing apps use. |
+| 2026-10-13 | The path-shaping banner is one line docked above the step bar ("Path 2 → 3 · Straighten · Done"), not a paragraph over the fencers. | It covered the action it was explaining. |
 | 2026-10-13 | Removed the Joint dropdown, its sliders and the piste-position slider; the controls beside the joint took over typed angles, hips position and Straighten. | They duplicated the controls beside the joint (lean principle; coach agreed). |
 | 2026-10-13 | Stomach and chest bend as one spine by default, with a switch in the joint controls. | Bending the back is one movement to a coach; two joints made it twice the work. |
 | 2026-10-13 | The point trail comes with Ghost (no new switch) and always shows while shaping a path. No arrows. | Shows a disengage's path; one less option. |

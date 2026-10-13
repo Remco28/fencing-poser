@@ -54,6 +54,7 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
   const ring = useRingTexture();
 
   const start = (f: FencerId, at: Vector3) => (e: ThreeEvent<PointerEvent>) => {
+    if (useEditor.getState().panning) return; // Space+drag slides the view instead
     e.stopPropagation();
     (e.target as unknown as Element).setPointerCapture(e.pointerId);
     drag.current = { f, plane: new Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new Vector3()), at), id: ++dragCount };

@@ -47,10 +47,15 @@ export function useKeyboardPosing() {
       }
       if (mod) return;
 
-      // Space plays the combination; while it plays, any key stops it first.
+      // Space stops playback at once. Otherwise holding it and dragging slides
+      // the view (as in drawing apps); a tap without a drag plays on release.
       if (key === ' ') {
         e.preventDefault();
-        return s.preview ? s.stopPreview() : s.startPreview();
+        if (e.repeat) return;
+        if (s.preview) return s.stopPreview();
+        space = { dragged: false };
+        s.setPanning(true);
+        return;
       }
       if (s.preview) {
         if (!['Shift', 'Alt', 'Control', 'Meta'].includes(e.key)) s.stopPreview();
@@ -88,17 +93,38 @@ export function useKeyboardPosing() {
         }
       });
     };
+    let space: { dragged: boolean } | null = null;
+    const onSpaceUp = (e: KeyboardEvent) => {
+      if (e.key !== ' ' || !space) return;
+      e.preventDefault();
+      const tapped = !space.dragged;
+      space = null;
+      const s = useEditor.getState();
+      s.setPanning(false);
+      if (tapped && !s.preview) s.startPreview();
+    };
+    const onPointerDown = () => {
+      if (space) space.dragged = true;
+    };
     // Show which modifiers are held, so Shift and Alt are never a secret.
     const onModifiers = (e: KeyboardEvent) => useEditor.getState().setHeld({ shift: e.shiftKey, alt: e.altKey });
-    const release = () => useEditor.getState().setHeld({ shift: false, alt: false });
+    const release = () => {
+      space = null;
+      useEditor.getState().setHeld({ shift: false, alt: false });
+      useEditor.getState().setPanning(false);
+    };
     window.addEventListener('keydown', onKey);
     window.addEventListener('keydown', onModifiers);
     window.addEventListener('keyup', onModifiers);
+    window.addEventListener('keyup', onSpaceUp);
+    window.addEventListener('pointerdown', onPointerDown, true);
     window.addEventListener('blur', release);
     return () => {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keydown', onModifiers);
       window.removeEventListener('keyup', onModifiers);
+      window.removeEventListener('keyup', onSpaceUp);
+      window.removeEventListener('pointerdown', onPointerDown, true);
       window.removeEventListener('blur', release);
     };
   }, []);
