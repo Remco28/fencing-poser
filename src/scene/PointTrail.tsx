@@ -12,7 +12,7 @@ const SAMPLES_PER_STEP = 16;
  * any motion-only steps between, as smooth playback would move it. Shown with
  * the ghost, so a disengage draws its arc under the blade.
  */
-export function PointTrail({ c, from, to }: { c: Combination; from: number; to: number }) {
+export function PointTrail({ c, from, to, onClick }: { c: Combination; from: number; to: number; onClick?: () => void }) {
   const paths = useMemo(() => {
     const n = Math.max(1, (to - from) * SAMPLES_PER_STEP);
     return FENCERS.map((f) => {
@@ -32,7 +32,22 @@ export function PointTrail({ c, from, to }: { c: Combination; from: number; to: 
         ({ f, points, length }) =>
           length > 0.03 && (
             <group key={f}>
-              <Line points={points} color="#d0263a" lineWidth={2} transparent opacity={0.75} />
+              <Line
+                points={points}
+                color="#d0263a"
+                lineWidth={onClick ? 3 : 2}
+                transparent
+                opacity={0.75}
+                onClick={
+                  onClick &&
+                  ((e) => {
+                    e.stopPropagation();
+                    onClick();
+                  })
+                }
+                onPointerOver={onClick && (() => (document.body.style.cursor = 'pointer'))}
+                onPointerOut={onClick && (() => (document.body.style.cursor = ''))}
+              />
               <mesh position={points[0]}>
                 <sphereGeometry args={[0.01, 10, 8]} />
                 <meshBasicMaterial color="#d0263a" transparent opacity={0.5} />

@@ -151,7 +151,14 @@ export function Stage() {
               heading={HEADING[f]}
             />
           ))}
-        {showPast && <PointTrail c={s.combination} from={previousIndex} to={s.stepIndex} />}
+        {showPast && (
+          <PointTrail
+            c={s.combination}
+            from={previousIndex}
+            to={s.stepIndex}
+            onClick={shaping ? undefined : () => s.editPath(s.stepIndex)}
+          />
+        )}
         {shaping && <PathHandles c={s.combination} to={s.stepIndex} />}
         {m && <ReadoutLines m={m} />}
         {balances.map(({ f, b }) => (
@@ -174,14 +181,19 @@ export function Stage() {
         <line ref={leader} />
       </svg>
       <JointHud el={hud} />
+      {showPast && !shaping && s.stepIndex > 0 && (
+        <button className="shape-prompt" onClick={() => s.editPath(s.stepIndex)} title="Bend the route a point takes into this step">
+          ⤳ Shape the path from step {s.stepIndex} to {s.stepIndex + 1}
+        </button>
+      )}
       {shaping && (
         <div className="path-banner" role="status">
           <p>
             <strong>
               Shaping the movement from step {s.stepIndex} to step {s.stepIndex + 1}.
             </strong>{' '}
-            Drag a red ball to bend that point’s path, e.g. under the opponent’s blade. The poses at both steps stay as they
-            are. Press Play to watch it.
+            Drag a ringed ball in the middle of a point’s red path to bend it, e.g. under the opponent’s blade. The poses at
+            both steps stay as they are. Press Play to watch it.
           </p>
           <div className="buttons">
             <button

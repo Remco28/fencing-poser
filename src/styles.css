@@ -1555,13 +1555,13 @@ button.switch.on .knob {
 }
 
 .path-link {
-  border: none;
-  background: none;
+  border: 1px solid var(--line);
+  background: #fff;
   color: var(--muted);
-  padding: 2px 4px;
-  font-size: 16px;
+  padding: 3px 6px;
+  font-size: 14px;
   line-height: 1;
-  border-radius: 4px;
+  border-radius: 999px;
 }
 
 .path-link:hover {
@@ -1577,4 +1577,16 @@ button.switch.on .knob {
 .path-link.on {
   background: #d0263a;
   color: #fff;
+}
+
+.shape-prompt {
+  position: absolute;
+  left: 16px;
+  bottom: 112px;
+  z-index: 5;
+  background: #fff;
+  border: 1px solid #f0b8bf;
+  color: #b4202f;
+  font-weight: 600;
+  box-shadow: 0 4px 14px #0002;
 }

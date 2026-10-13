@@ -1,13 +1,39 @@
 import { useThree, type ThreeEvent } from '@react-three/fiber';
-import { useMemo, useRef, useState } from 'react';
-import { Plane, Vector3 } from 'three';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CanvasTexture, Plane, SRGBColorSpace, Vector3 } from 'three';
 import { useEditor } from '../editor/store.ts';
-import { FENCERS, HEADING, type Combination, type FencerId } from '../model/combination.ts';
-import { solveRig } from '../rig/kinematics.ts';
+import { FENCERS, type Combination, type FencerId } from '../model/combination.ts';
 import { frameAt } from '../viewer/player.ts';
 import { pathMiddle, shapePath } from './path.ts';
 
 let dragCount = 0;
+
+/** A white disc with a red ring and a small grip mark: clearly not the red épée point handle. */
+function useRingTexture() {
+  const texture = useMemo(() => {
+    const size = 96;
+    const canvas = Object.assign(document.createElement('canvas'), { width: size, height: size });
+    const g = canvas.getContext('2d')!;
+    g.beginPath();
+    g.arc(size / 2, size / 2, size / 2 - 6, 0, Math.PI * 2);
+    g.fillStyle = '#ffffff';
+    g.fill();
+    g.lineWidth = 9;
+    g.strokeStyle = '#d0263a';
+    g.stroke();
+    g.fillStyle = '#d0263a';
+    for (const dx of [-14, 0, 14]) {
+      g.beginPath();
+      g.arc(size / 2 + dx, size / 2, 5, 0, Math.PI * 2);
+      g.fill();
+    }
+    const t = new CanvasTexture(canvas);
+    t.colorSpace = SRGBColorSpace;
+    return t;
+  }, []);
+  useEffect(() => () => texture.dispose(), [texture]);
+  return texture;
+}
 
 /**
  * A ball in the middle of each moving point's path into step `to`. Dragging
@@ -21,16 +47,11 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
   const [hover, setHover] = useState<FencerId | null>(null);
 
   const middles = useMemo(() => {
-    const before = c.steps[to - 1];
-    const after = c.steps[to];
-    return FENCERS.flatMap((f) => {
-      const start = solveRig(c.fencers[f], before.poses[f], HEADING[f]).tip;
-      const end = solveRig(c.fencers[f], after.poses[f], HEADING[f]).tip;
-      // Only points that travel (or paths already bent) get a ball.
-      if (start.distanceTo(end) < 0.03 && !after.via?.[f]) return [];
-      return [{ f, at: pathMiddle(c, to, f, (pos) => frameAt(c, pos)) }];
-    });
+    // Every fencer gets a ball, even if the point hardly moves: dragging it
+    // out sends the point round and back.
+    return FENCERS.map((f) => ({ f, at: pathMiddle(c, to, f, (pos) => frameAt(c, pos)) }));
   }, [c, to]);
+  const ring = useRingTexture();
 
   const start = (f: FencerId, at: Vector3) => (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -58,8 +79,9 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
     <>
       {middles.map(({ f, at }) => (
         <group key={f} position={at}>
-          <mesh
-            renderOrder={10}
+          <sprite
+            renderOrder={12}
+            scale={hover === f ? [0.05, 0.05, 1] : [0.042, 0.042, 1]}
             onPointerDown={start(f, at)}
             onPointerMove={move}
             onPointerUp={end}
@@ -74,9 +96,8 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
               document.body.style.cursor = '';
             }}
           >
-            <sphereGeometry args={[hover === f ? 0.045 : 0.036, 20, 16]} />
-            <meshBasicMaterial color="#d0263a" transparent opacity={0.9} depthTest={false} />
-          </mesh>
+            <spriteMaterial map={ring} depthTest={false} transparent sizeAttenuation={false} />
+          </sprite>
         </group>
       ))}
     </>
