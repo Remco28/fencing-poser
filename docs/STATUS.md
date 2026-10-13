@@ -33,7 +33,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Export**: captioned picture, PDF handout (two steps per page), video of smooth playback, combination file. `src/export/`
 
 ### Quality
-- 91 unit tests (anatomy directions, IK, blades, playback, links, merging, store); run `npm test`.
+- 93 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, blades, playback, links, merging, store); run `npm test`.
 - Visual checks are done in a headless browser through a dev-only `window.__editor` hook.
 
 ## Next (agreed with the coach)

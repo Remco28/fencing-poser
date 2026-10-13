@@ -63,6 +63,7 @@ Every decision that shapes the app, newest first within each group, with the rea
 | 2026-10-12 | TypeScript, Vite, React, Three.js via React Three Fiber and drei, Zustand. | Standard, fast web 3D stack. |
 | 2026-10-12 | Poses are stored as anatomical angles in degrees per joint, not quaternions. | Readable presets, mirroring is a swap, joint limits always hold, interpolation stays inside limits. |
 | 2026-10-12 | The fencer is always set down on the floor; height is never stored. | Presets work at any height; no floating fencers. |
+| 2026-10-13 | The fencer rests on the lowest part of the body, not only the soles: in a very deep bend the knee touches down (a kneel) instead of sinking through the floor. Tested on 1,000 random poses. | The coach saw legs disappearing below the piste in deep flexes. |
 | 2026-10-12 | Built-in presets are solved from targets by `tools/fit-pose.ts` and written to `src/presets/fitted.ts`; never hand-tuned angles. | Presets come from fencing intent; the fitter needs "upright torso" terms or it leans the body to cheat. |
 | 2026-10-12 | Exports render in their own hidden canvas. | Pictures and videos never show editor handles or controls, and the coach's view is untouched. |
 | 2026-10-12 | The student viewer loads without the editor's code. | Phones download less. |

@@ -58,8 +58,10 @@ export function solveRig(setup: FencerSetup, pose: Pose, heading = 0, pelvisY?: 
   );
   world.grip = new Matrix4().multiplyMatrices(world[weaponWrist], gripLocal);
 
-  // Set the fencer down so the lowest foot touches the floor.
-  const lowest = Math.min(...soleCorners(layout, world).map((p) => p.y));
+  // Set the fencer down on whatever is lowest: the feet, usually, but a knee
+  // in a very deep bend (the fencer kneels) or a hand, so nothing sinks
+  // through the floor.
+  const lowest = Math.min(...soleCorners(layout, world).map((p) => p.y), lowestOf(layout, world));
   const drop = new Matrix4().makeTranslation(0, pelvisY ?? pose.root.lift - lowest, 0);
   for (const name of Object.keys(world) as JointName[]) world[name].premultiply(drop);
 
@@ -79,6 +81,45 @@ function withGripDefaults(setup: FencerSetup, pose: Pose): Pose {
 }
 
 export const PISTOL_TILT = 10;
+
+/**
+ * Radius of the body's rounded parts around each joint, as a fraction of
+ * height (matching the drawn mannequin closely enough to keep it above the
+ * floor). The segments between joints are no thicker than their joints.
+ */
+const BODY_RADIUS: Partial<Record<JointName, number>> = {
+  pelvis: 0.06,
+  shoulder_r: 0.036,
+  shoulder_l: 0.036,
+  elbow_r: 0.029,
+  elbow_l: 0.029,
+  wrist_r: 0.022,
+  wrist_l: 0.022,
+  hip_r: 0.05,
+  hip_l: 0.05,
+  knee_r: 0.04,
+  knee_l: 0.04,
+  ankle_r: 0.03,
+  ankle_l: 0.03,
+};
+
+function lowestOf(layout: Layout, world: Record<JointName, Matrix4>): number {
+  const H = layout.height;
+  const y = (j: JointName, local: [number, number, number] = [0, 0, 0]) => new Vector3(...local).applyMatrix4(world[j]).y;
+  let low = Infinity;
+  for (const [j, r] of Object.entries(BODY_RADIUS) as [JointName, number][]) low = Math.min(low, y(j) - r * H * layout.build);
+  // Hand ends, torso and head.
+  for (const s of ['r', 'l'] as const) low = Math.min(low, y(`wrist_${s}`, [0, -layout.hand, 0]) - 0.02 * H);
+  low = Math.min(low, y('abdomen', [0, 0.055 * H, 0]) - 0.085 * H * layout.build);
+  low = Math.min(low, y('chest', [0, 0.075 * H, 0]) - 0.118 * H * layout.build);
+  low = Math.min(low, y('neck', [0.008 * H, 0.088 * H, 0]) - 0.075 * H);
+  return low;
+}
+
+/** The lowest point of the body (not counting the soles), in world space. */
+export function lowestBodyPoint(rig: Rig): number {
+  return lowestOf(rig.layout, rig.world);
+}
 
 /** The four corners of each sole, in world space. */
 export function soleCorners(layout: Layout, world: Record<JointName, Matrix4>): Vector3[] {
