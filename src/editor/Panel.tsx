@@ -3,6 +3,7 @@ import { FENCERS, TARGET_NAMES, type FencerId, type TargetArea } from '../model/
 import { formatDistance, formatHeight } from '../model/units.ts';
 import { Toggle } from '../ui/Toggle.tsx';
 import { STEP } from './keyboard.ts';
+import { HistoryList } from './HistoryList.tsx';
 import { PresetsPanel } from './PresetsPanel.tsx';
 import { currentStep, useEditor } from './store.ts';
 
@@ -71,8 +72,17 @@ export function Panel(props: { onOpenLibrary: () => void; onShare: () => void; o
             <button className="small" onClick={s.redo} disabled={!s.future.length} title="Redo (Ctrl+Shift+Z)">
               ↷ Redo
             </button>
+            <button
+              className="small history-toggle"
+              onClick={s.toggleHistory}
+              aria-pressed={s.showHistory}
+              title={s.showHistory ? 'Hide the list of edits' : 'Show every edit, and jump back to any of them'}
+            >
+              History
+            </button>
           </div>
         </div>
+        {s.showHistory && <HistoryList />}
         <div className="posing">
           <span>Posing fencer</span>
           <Toggle label="Posing fencer" bare value={s.active} options={FENCERS.map((f) => [f, f])} onChange={s.setActive} />

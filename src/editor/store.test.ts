@@ -182,3 +182,31 @@ describe('path shaping', () => {
     expect(currentStep(state()).pins).toBeUndefined();
   });
 });
+
+describe('history list', () => {
+  const labels = () => [...state().past.map((p) => p.change.label), state().change.label, ...state().future.map((p) => p.change.label)];
+
+  it('names each edit in plain words', () => {
+    state().setAngle('elbow_r', 'flex', 90);
+    state().applyPreset(enGarde, 'all');
+    state().addStep();
+    state().setStepText({ label: 'Disengage' });
+    expect(labels().slice(1)).toEqual(['Step 1 · A: right elbow', 'Step 1 · A: En garde', 'Added step 2', 'Step 2 · named “Disengage”']);
+  });
+
+  it('jumps back to any edit, keeps later ones to jump forward to, and drops them on a new edit', () => {
+    state().setAngle('knee_r', 'flex', 30);
+    state().setAngle('knee_l', 'flex', 75);
+    state().setAngle('elbow_r', 'flex', 50);
+    state().jumpTo(1);
+    expect(angle(pose(), 'knee_r', 'flex')).toBe(30);
+    expect(angle(pose(), 'knee_l', 'flex')).not.toBe(75);
+    expect(state().future).toHaveLength(2);
+    state().jumpTo(3);
+    expect(angle(pose(), 'elbow_r', 'flex')).toBe(50);
+    state().jumpTo(1);
+    state().setAngle('neck', 'flex', 10);
+    expect(labels()).toHaveLength(3);
+    expect(state().future).toHaveLength(0);
+  });
+});

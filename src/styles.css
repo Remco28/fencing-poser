@@ -985,6 +985,18 @@ label.inline select {
 
 .head-row .save-state {
   margin: 0;
+  min-width: 0;
+}
+
+.head-row .buttons {
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+button.small.history-toggle[aria-pressed='true'] {
+  background: #fde9df;
+  border-color: var(--accent);
+  color: inherit;
 }
 
 .posing {
@@ -1653,4 +1665,67 @@ button.switch.on .knob {
   color: #b4202f;
   font-weight: 600;
   box-shadow: 0 4px 14px #0002;
+}
+
+.history {
+  margin: 8px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.history ol {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.history li button {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+}
+
+.history li button:hover {
+  background: #0000000d;
+}
+
+.history li button[aria-current] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.history li button.undone {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.history .what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history .when {
+  flex: none;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.history .hint {
+  margin: 0;
+  padding: 0 10px 6px;
+  font-size: 11px;
+  color: var(--muted);
 }

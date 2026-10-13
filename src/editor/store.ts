@@ -23,6 +23,7 @@ import {
   toEntry,
   type LibraryEntry,
 } from '../library/storage.ts';
+import { describeEdit } from './history.ts';
 import {
   copyStep,
   FORWARD,
@@ -47,9 +48,16 @@ import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type
 export type PresetPart = 'all' | 'upper' | 'lower';
 export type { Units };
 
+/** What made a state, for the history list. */
+export interface Change {
+  label: string;
+  at: number;
+}
+
 interface Snapshot {
   combination: Combination;
   stepIndex: number;
+  change: Change;
 }
 
 interface EditorState extends Snapshot {
@@ -59,6 +67,10 @@ interface EditorState extends Snapshot {
   units: Units;
   past: Snapshot[];
   future: Snapshot[];
+  /** Jump to entry `index` of the history list (past, then now, then undone edits). */
+  jumpTo: (index: number) => void;
+  showHistory: boolean;
+  toggleHistory: () => void;
   /** Edits with the same key in quick succession (a slider drag, a held key) undo as one. */
   lastEdit: { key: string; at: number } | null;
   /** What the coach saved: custom presets and edited built-ins. */
@@ -210,18 +222,22 @@ export function activeSetup(s: EditorState): FencerSetup {
   return s.combination.fencers[s.active];
 }
 
-/** Record the current state in history before applying `next`. */
-function edit(state: EditorState, next: Partial<Snapshot>, key?: string): Partial<EditorState> {
+const snapshot = (s: EditorState): Snapshot => ({ combination: s.combination, stepIndex: s.stepIndex, change: s.change });
+
+/** Record the current state in history before applying `next`; `label` names it (else read from what changed). */
+function edit(state: EditorState, next: Partial<Snapshot>, key?: string, label?: string): Partial<EditorState> {
   const now = Date.now();
   // A drag stays one step however slowly it moves; other edits merge only in quick succession.
   const joined = key && state.lastEdit?.key === key && (key.startsWith('drag.') || now - state.lastEdit.at < COALESCE_MS);
+  const said = label ?? (next.combination ? describeEdit(state.combination, next.combination) : 'Edit');
+  // Nothing changed (a key pressed at a joint's limit, a pose applied twice): keep history clean.
+  if (!said) return {};
   const combination = next.combination && { ...next.combination, updatedAt: new Date(now).toISOString() };
   return {
     ...next,
     ...(combination && { combination }),
-    past: joined
-      ? state.past
-      : [...state.past, { combination: state.combination, stepIndex: state.stepIndex }].slice(-HISTORY_LIMIT),
+    change: { label: said, at: now },
+    past: joined ? state.past : [...state.past, snapshot(state)].slice(-HISTORY_LIMIT),
     future: [],
     lastEdit: key ? { key, at: now } : null,
   };
@@ -282,7 +298,16 @@ function withAngle(pose: Pose, joint: JointName, dof: string, value: number): Po
 const PISTE_HALF = 8.5;
 
 function fresh(combination: Combination): Partial<EditorState> {
-  return { combination, stepIndex: 0, past: [], future: [], lastEdit: null, selected: null, active: 'A' };
+  return {
+    combination,
+    stepIndex: 0,
+    change: { label: 'Opened', at: Date.now() },
+    past: [],
+    future: [],
+    lastEdit: null,
+    selected: null,
+    active: 'A',
+  };
 }
 
 export const useEditor = create<EditorState>((set, get) => {
@@ -326,9 +351,19 @@ export const useEditor = create<EditorState>((set, get) => {
     active: 'A',
     selected: null,
     units: 'metric',
+    change: { label: 'New combination', at: Date.now() },
     past: [],
     future: [],
     lastEdit: null,
+    showHistory: false,
+    toggleHistory: () => set((s) => ({ showHistory: !s.showHistory })),
+    jumpTo: (index) =>
+      set((s) => {
+        const all = [...s.past, snapshot(s), ...s.future];
+        const target = all[index];
+        if (!target || index === s.past.length) return {};
+        return { ...target, past: all.slice(0, index), future: all.slice(index + 1), lastEdit: null, preview: null };
+      }),
     savedPresets: [],
     presets: shownPresets([]),
     library: [],
@@ -463,7 +498,12 @@ export const useEditor = create<EditorState>((set, get) => {
       }),
     applyPreset: (preset, part = get().presetPart) =>
       set((s) =>
-        edit(s, { combination: moved(s, poseFromPreset(preset, activeSetup(s).handedness, activePose(s), part)) }),
+        edit(
+          s,
+          { combination: moved(s, poseFromPreset(preset, activeSetup(s).handedness, activePose(s), part)) },
+          undefined,
+          `Step ${s.stepIndex + 1} · ${s.active}: ${preset.name}`,
+        ),
       ),
     applyPresetToOther: (preset) =>
       set((s) => {
@@ -471,16 +511,23 @@ export const useEditor = create<EditorState>((set, get) => {
         const step = currentStep(s);
         const pose = poseFromPreset(preset, s.combination.fencers[f].handedness, step.poses[f], s.presetPart);
         const after = pushBlades(s.combination, step.poses, { ...step.poses, [f]: pose }, f);
-        return edit(s, { combination: withStep(s, (st) => ({ ...st, poses: after })) });
+        return edit(s, { combination: withStep(s, (st) => ({ ...st, poses: after })) }, undefined, `Step ${s.stepIndex + 1} · ${f}: ${preset.name}`);
       }),
     engageBlades: (line) =>
-      set((s) => edit(s, { combination: withStep(s, (st) => ({ ...st, poses: engage(s.combination, st.poses, s.active, line) })) })),
+      set((s) =>
+        edit(
+          s,
+          { combination: withStep(s, (st) => ({ ...st, poses: engage(s.combination, st.poses, s.active, line) })) },
+          undefined,
+          `Step ${s.stepIndex + 1} · ${s.active} engages in ${line}`,
+        ),
+      ),
     touchTarget: (area) => {
       const s = get();
       const before = currentStep(s).poses;
       const result = touch(s.combination, before, s.active, area);
       const poses = pushBlades(s.combination, before, result.poses, s.active);
-      set(edit(s, { combination: withStep(s, (st) => ({ ...st, poses })) }));
+      set(edit(s, { combination: withStep(s, (st) => ({ ...st, poses })) }, undefined, `Step ${s.stepIndex + 1} · ${s.active} touches`));
       return result.short;
     },
     presetPart: 'all',
@@ -532,7 +579,7 @@ export const useEditor = create<EditorState>((set, get) => {
         return {
           ...previous,
           past: s.past.slice(0, -1),
-          future: [{ combination: s.combination, stepIndex: s.stepIndex }, ...s.future],
+          future: [snapshot(s), ...s.future],
           lastEdit: null,
         };
       }),
@@ -542,7 +589,7 @@ export const useEditor = create<EditorState>((set, get) => {
         if (!next) return {};
         return {
           ...next,
-          past: [...s.past, { combination: s.combination, stepIndex: s.stepIndex }],
+          past: [...s.past, snapshot(s)],
           future: rest,
           lastEdit: null,
         };
