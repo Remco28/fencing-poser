@@ -86,8 +86,8 @@ interface EditorState extends Snapshot {
   /** Start shaping the movement into step `index` (from the step before it). */
   editPath: (index: number) => void;
   exitPath: () => void;
-  /** Bend (pose) or straighten (null) a fencer's path into the current step; a drag undoes as one. */
-  setVia: (fencer: FencerId, pose: Pose | null, dragId?: number) => void;
+  /** Bend (offset) or straighten (null) a fencer's path into the current step; a drag undoes as one. */
+  setBend: (fencer: FencerId, bend: Pose['joints'] | null, dragId?: number) => void;
   /** Stomach and chest bend as one spine (the default) or separately. */
   spineTogether: boolean;
   toggleSpineTogether: () => void;
@@ -351,16 +351,23 @@ export const useEditor = create<EditorState>((set, get) => {
     pathEdit: false,
     editPath: (index) => set({ stepIndex: index, pathEdit: true, selected: null, preview: null }),
     exitPath: () => set({ pathEdit: false }),
-    setVia: (fencer, pose, dragId) =>
+    setBend: (fencer, bend, dragId) =>
       set((s) =>
         edit(
           s,
           {
             combination: withStep(s, (st) => {
+              const bends = { ...st.bend };
+              if (bend) bends[fencer] = bend;
+              else delete bends[fencer];
+              // The older halfway-pose shaping gives way to the bend.
               const via = { ...st.via };
-              if (pose) via[fencer] = pose;
-              else delete via[fencer];
-              return { ...st, via: Object.keys(via).length ? via : undefined };
+              delete via[fencer];
+              return {
+                ...st,
+                bend: Object.keys(bends).length ? bends : undefined,
+                via: Object.keys(via).length ? via : undefined,
+              };
             }),
           },
           dragId === undefined ? undefined : `drag.path.${dragId}`,

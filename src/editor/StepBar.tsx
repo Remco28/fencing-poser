@@ -57,13 +57,13 @@ export function StepBar() {
             <li key={step.id}>
               {i > 0 && (
                 <button
-                  className={`path-link${s.pathEdit && s.stepIndex === i ? ' on' : ''}${step.via ? ' shaped' : ''}`}
+                  className={`path-link${s.pathEdit && s.stepIndex === i ? ' on' : ''}${step.via || step.bend ? ' shaped' : ''}`}
                   onClick={() => (s.pathEdit && s.stepIndex === i ? s.exitPath() : s.editPath(i))}
                   disabled={playing}
-                  title={`Shape the movement from step ${i} to step ${i + 1}${step.via ? ' (shaped)' : ''}`}
+                  title={`Shape the movement from step ${i} to step ${i + 1}${step.via || step.bend ? ' (shaped)' : ''}`}
                   aria-label={`Shape the movement from step ${i} to step ${i + 1}`}
                 >
-                  {step.via ? '⤳' : '→'}
+                  {step.via || step.bend ? '⤳' : '→'}
                 </button>
               )}
               <div className={`step-chip${i === shownIndex ? ' on' : ''}${step.motionOnly ? ' via' : ''}`}>

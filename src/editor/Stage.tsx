@@ -197,8 +197,8 @@ export function Stage() {
           </p>
           <div className="buttons">
             <button
-              onClick={() => FENCERS.forEach((f) => step.via?.[f] && s.setVia(f, null))}
-              disabled={!step.via}
+              onClick={() => FENCERS.forEach((f) => (step.via?.[f] || step.bend?.[f]) && s.setBend(f, null))}
+              disabled={!step.via && !step.bend}
               title="Back to the plain, direct movement"
             >
               Straighten paths

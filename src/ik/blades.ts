@@ -146,19 +146,42 @@ export function targetPoint(r: Rig, area: TargetArea, weaponSide: 'r' | 'l', fro
  * Move a fencer's arm (reach, then aim; alternated, since each moves the
  * other) so the point lands on `target`, keeping the body as it is.
  */
-export function pointTo(c: Combination, f: FencerId, pose: Pose, target: Vector3): { pose: Pose; miss: number } {
+export function pointTo(
+  c: Combination,
+  f: FencerId,
+  pose: Pose,
+  target: Vector3,
+  /** Playback passes false: one consistent way of reaching, so frames cannot flip between two answers. */
+  lineFallback = true,
+): { pose: Pose; miss: number } {
   const wristName = weaponWrist(c, f);
   const armSide = wristName === 'wrist_r' ? 'r' : 'l';
   const build = (p: Pose) => solveRig(c.fencers[f], p, HEADING[f]);
+  // Reach and aim pull on each other and can chase rather than settle, so
+  // keep the best attempt, not the last.
+  const settle = (wristGoal: Vector3) => {
+    let p = pose;
+    let goal = wristGoal;
+    let best = { pose, miss: build(pose).tip.distanceTo(target) };
+    for (let i = 0; i < 8; i++) {
+      p = aim(reach(p, build, 'arm', armSide, goal), build, c.fencers[f], target);
+      const now = build(p);
+      const miss = now.tip.distanceTo(target);
+      if (miss < best.miss) best = { pose: p, miss };
+      if (miss < 0.003) break;
+      goal = target.clone().sub(now.tip.clone().sub(jointPosition(now, wristName)));
+    }
+    return best;
+  };
   const r = build(pose);
-  let p = pose;
-  let goal = target.clone().sub(r.tip.clone().sub(jointPosition(r, wristName)));
-  for (let i = 0; i < 6; i++) {
-    p = aim(reach(p, build, 'arm', armSide, goal), build, c.fencers[f], target);
-    const now = build(p);
-    goal = target.clone().sub(now.tip.clone().sub(jointPosition(now, wristName)));
-  }
-  return { pose: p, miss: build(p).tip.distanceTo(target) };
+  const wrist = jointPosition(r, wristName);
+  // First keep the blade's angle and carry the hand there.
+  const kept = settle(target.clone().sub(r.tip.clone().sub(wrist)));
+  if (kept.miss < 0.01 || !lineFallback) return kept;
+  // Otherwise try arm and blade in one line from the shoulder.
+  const shoulder = jointPosition(r, `shoulder_${armSide}`);
+  const line = settle(target.clone().sub(target.clone().sub(shoulder).setLength(r.tip.distanceTo(wrist))));
+  return line.miss < kept.miss ? line : kept;
 }
 
 /** Leaning in for a touch: how far each part of the body can bend toward the target, at full lean. */

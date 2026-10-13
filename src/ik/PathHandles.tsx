@@ -4,7 +4,7 @@ import { CanvasTexture, Plane, SRGBColorSpace, Vector3 } from 'three';
 import { useEditor } from '../editor/store.ts';
 import { FENCERS, type Combination, type FencerId } from '../model/combination.ts';
 import { frameAt } from '../viewer/player.ts';
-import { pathMiddle, shapePath } from './path.ts';
+import { bendFor, pathMiddle } from './path.ts';
 
 let dragCount = 0;
 
@@ -66,7 +66,7 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
     const target = e.ray.intersectPlane(d.plane, new Vector3());
     if (!target) return;
     const s = useEditor.getState();
-    s.setVia(d.f, shapePath(s.combination, to, d.f, target), d.id);
+    s.setBend(d.f, bendFor(s.combination, to, d.f, target), d.id);
   };
   const end = (e: ThreeEvent<PointerEvent>) => {
     if (!drag.current) return;

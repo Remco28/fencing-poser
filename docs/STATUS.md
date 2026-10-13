@@ -22,7 +22,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 
 ### Combinations
 - **Steps** with label, notes, targets and timing; new steps copy the current one; the step bar with Play and a ⋯ menu per step. `src/editor/StepBar.tsx`, `src/model/combination.ts`
-- **Path shaping**: click the arrow between two steps (or, with Ghost on, the "Shape the path" button or the red trail) and drag the ringed ball in the middle of a point's path to bend the movement (e.g. under the blade); stored as a halfway pose (`Step.via`) that playback curves through. `src/ik/path.ts`, `src/ik/PathHandles.tsx`, `src/model/tween.ts`
+- **Path shaping**: click the arrow between two steps (or, with Ghost on, the "Shape the path" button or the red trail) and drag the ringed ball in the middle of a point's path to bend the movement (e.g. under the blade); stored as a change to the arm's joints at the middle of the movement (`Step.bend`), faded in and out so the point glides. `src/ik/path.ts`, `src/ik/PathHandles.tsx`, `src/model/tween.ts`
 - **Undo/redo** for every change; a drag or a held key undoes as one step. `src/editor/store.ts`
 - **Camera**: Side, Overhead, Behind A/B, Zoom to both / to one fencer, Lock, One view for all steps; each step keeps its view. `src/scene/CameraRig.tsx`, `FitRig.tsx`
 - **Show**: distances (feet, point to opponent, "Touch"), ghost of the previous step, labels. `src/scene/measure.ts`
@@ -36,7 +36,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Export**: captioned picture, PDF handout (two steps per page), video of smooth playback, combination file. `src/export/`
 
 ### Quality
-- 99 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, blades, playback, links, merging, store); run `npm test`.
+- 102 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, blades, playback, links, merging, store); run `npm test`.
 - Visual checks are done in a headless browser through a dev-only `window.__editor` hook.
 
 ## Testing with people

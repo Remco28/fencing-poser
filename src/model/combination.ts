@@ -66,7 +66,16 @@ export interface Step {
   camera?: StepCamera;
   display?: StepDisplay;
   /**
-   * The shape of the movement into this step: a fencer's pose halfway
+   * How the movement into this step is bent, per fencer: how much each arm
+   * joint turns away from the plain movement at its middle (degrees). The
+   * change fades in from nothing at the step before to all of it halfway and
+   * back to nothing here, so the point glides round (under the opponent's
+   * blade, say) and passes exactly where it was dragged. Set by dragging the
+   * middle of the point's path.
+   */
+  bend?: Partial<Record<FencerId, Pose['joints']>>;
+  /**
+   * Older shaping: a fencer's pose halfway
    * through it. Playback curves through it, so a point can go round the
    * opponent's blade instead of straight through. Set by dragging the
    * point's path; absent = the plain, direct movement.
