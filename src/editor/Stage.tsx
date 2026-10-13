@@ -16,6 +16,7 @@ import { measure, rigsFor, VIEW_NAMES, viewFor, type ViewName } from '../scene/m
 import { Environment } from '../scene/Environment.tsx';
 import { ReadoutLines } from '../scene/Readouts.tsx';
 import { PointTrail } from '../scene/PointTrail.tsx';
+import { PathHandles } from '../ik/PathHandles.tsx';
 import { BalanceMark } from '../scene/BalanceMark.tsx';
 import { balanceOf } from '../rig/balance.ts';
 import { formatDistance } from '../model/units.ts';
@@ -43,14 +44,18 @@ export function Stage() {
   const playing = !!s.preview;
   const frame = useMemo(() => (s.preview ? frameAt(s.combination, s.preview.pos) : null), [s.preview, s.combination]);
   const step = s.preview ? { ...s.combination.steps[keyAt(s.combination, s.preview.pos)], poses: frame!.poses } : editingStep;
+  // Shaping the movement into this step: poses are fixed, paths can be bent.
+  const shaping = s.pathEdit && s.stepIndex > 0 && !playing;
   // The step before: the last real (not motion-only) one, so the ghost and the
-  // point trail cover the whole move, via steps included.
+  // point trail cover the whole move.
   const previousIndex = (() => {
+    if (shaping) return s.stepIndex - 1;
     for (let i = s.stepIndex - 1; i >= 0; i--) if (!s.combination.steps[i].motionOnly) return i;
     return s.stepIndex - 1;
   })();
   const previous = !playing && previousIndex >= 0 ? s.combination.steps[previousIndex] : null;
   const display = step.display ?? {};
+  const showPast = !!previous && (shaping || !!display.ghost);
   const m = useMemo(() => (display.distance ? measure(s.combination, step) : null), [display.distance, s.combination, step]);
   // Off-balance warnings, for poses the coach makes (not while playing).
   const balances = useMemo(
@@ -131,11 +136,11 @@ export function Stage() {
             targets={(display.targets ?? [])
               .filter((t) => t.fencer === f)
               .flatMap((t) => targetParts(t.area, s.combination.fencers[f]))}
-            onSelect={(joint) => s.select(joint, f)}
+            onSelect={shaping ? undefined : (joint) => s.select(joint, f)}
             onActivate={() => s.setActive(f)}
           />
         ))}
-        {display.ghost &&
+        {showPast &&
           previous &&
           FENCERS.map((f) => (
             <Mannequin
@@ -146,14 +151,15 @@ export function Stage() {
               heading={HEADING[f]}
             />
           ))}
-        {display.ghost && previous && <PointTrail c={s.combination} from={previousIndex} to={s.stepIndex} />}
+        {showPast && <PointTrail c={s.combination} from={previousIndex} to={s.stepIndex} />}
+        {shaping && <PathHandles c={s.combination} to={s.stepIndex} />}
         {m && <ReadoutLines m={m} />}
         {balances.map(({ f, b }) => (
           <BalanceMark key={f} balance={b} />
         ))}
         {s.selected && <MotionGuides guides={guides} active={recent} />}
         {dialSide && <ThumbDial rig={activeRig} side={dialSide} weapon={dialSide === weaponSide} />}
-        {s.handles && !s.selected && !playing && (
+        {s.handles && !s.selected && !playing && !shaping && (
           <Handles setup={s.combination.fencers[s.active]} pose={step.poses[s.active]} heading={HEADING[s.active]} />
         )}
         <OrbitControls target={[0, 0.9, 0]} makeDefault maxPolarAngle={Math.PI * 0.495} enabled={!s.cameraLocked && !playing} />
@@ -168,6 +174,29 @@ export function Stage() {
         <line ref={leader} />
       </svg>
       <JointHud el={hud} />
+      {shaping && (
+        <div className="path-banner" role="status">
+          <p>
+            <strong>
+              Shaping the movement from step {s.stepIndex} to step {s.stepIndex + 1}.
+            </strong>{' '}
+            Drag a red ball to bend that point’s path, e.g. under the opponent’s blade. The poses at both steps stay as they
+            are. Press Play to watch it.
+          </p>
+          <div className="buttons">
+            <button
+              onClick={() => FENCERS.forEach((f) => step.via?.[f] && s.setVia(f, null))}
+              disabled={!step.via}
+              title="Back to the plain, direct movement"
+            >
+              Straighten paths
+            </button>
+            <button className="primary" onClick={s.exitPath} title="Back to posing (Esc)">
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="stage-tools" aria-hidden={playing || undefined}>
         <div className="tool-group" role="toolbar" aria-label="Camera">

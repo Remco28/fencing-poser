@@ -165,3 +165,17 @@ describe('whole spine', () => {
     state().toggleSpineTogether();
   });
 });
+
+describe('path shaping', () => {
+  it('bends and straightens a path, undoably', () => {
+    state().addStep();
+    const bent = { ...pose(), joints: { ...pose().joints, elbow_r: { flex: 10 } } };
+    state().setVia('A', bent, 1);
+    expect(currentStep(state()).via?.A).toEqual(bent);
+    state().undo();
+    expect(currentStep(state()).via).toBeUndefined();
+    state().redo();
+    state().setVia('A', null);
+    expect(currentStep(state()).via).toBeUndefined();
+  });
+});

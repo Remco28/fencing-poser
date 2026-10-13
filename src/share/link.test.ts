@@ -12,6 +12,7 @@ function sample() {
   second.camera = { position: [0.123, 1.5, 6], target: [0, 0.9, 0] };
   second.display = { distance: true, targets: [{ fencer: 'B', area: 'arm' }] };
   second.motionOnly = true;
+  second.via = { A: { ...second.poses.A, joints: { ...second.poses.A.joints, elbow_r: { flex: 33 } } } };
   return { ...c, title: 'Feint disengage', steps: [c.steps[0], second] };
 }
 
@@ -26,6 +27,7 @@ describe('share links', () => {
     expect(s.label).toBe('Lunge');
     expect(s.notes).toBe('Hand before foot');
     expect(s.motionOnly).toBe(true);
+    expect(s.via?.A?.joints.elbow_r).toEqual({ flex: 33 });
     expect(s.display).toEqual({ distance: true, targets: [{ fencer: 'B', area: 'arm' }] });
     expect(s.poses.A.root.x).toBeCloseTo(-1.23, 5);
     expect(s.poses.A.joints.knee_r).toEqual(c.steps[1].poses.A.joints.knee_r);

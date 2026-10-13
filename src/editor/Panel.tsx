@@ -216,13 +216,9 @@ function StepTab() {
           ))}
         </select>
       </label>
-      <label className="check">
-        <input type="checkbox" checked={!!step.motionOnly} onChange={(e) => s.setStepOptions({ motionOnly: e.target.checked })} />
-        <span>
-          <strong>Motion only.</strong> A <em>via</em> step: it shapes the movement (the point going under the blade) but is
-          skipped when stepping through and in handouts.
-        </span>
-      </label>
+      <p className="hint small">
+        To bend a point’s path (say, under the opponent’s blade), click the arrow before this step in the step bar.
+      </p>
     </section>
   );
 }

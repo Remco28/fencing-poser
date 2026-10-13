@@ -31,6 +31,7 @@ function compactStep(s: Step) {
     poses: { A: compactPose(s.poses.A), B: compactPose(s.poses.B) },
     camera: s.camera && { position: s.camera.position.map(r2), target: s.camera.target.map(r2) },
     display: s.display && Object.keys(s.display).length ? s.display : undefined,
+    via: s.via && Object.fromEntries(Object.entries(s.via).map(([f, p]) => [f, p && compactPose(p)])),
     motionOnly: s.motionOnly || undefined,
     durationMs: s.durationMs,
   };
@@ -66,7 +67,8 @@ export async function decodeCombination(hash: string): Promise<Combination | nul
     const data = JSON.parse(new TextDecoder().decode(bytes)) as {
       title: string;
       fencers: Combination['fencers'];
-      steps: (Omit<Step, 'id' | 'label' | 'notes' | 'poses'> & {
+      steps: (Omit<Step, 'id' | 'label' | 'notes' | 'poses' | 'via'> & {
+        via?: Partial<Record<'A' | 'B', { root: Partial<Pose['root']>; joints: Pose['joints'] }>>;
         label?: string;
         notes?: string;
         poses: Record<'A' | 'B', { root: Partial<Pose['root']>; joints: Pose['joints'] }>;
@@ -88,6 +90,7 @@ export async function decodeCombination(hash: string): Promise<Combination | nul
         label: s.label ?? '',
         notes: s.notes ?? '',
         poses: { A: pose(s.poses.A), B: pose(s.poses.B) },
+        via: s.via && Object.fromEntries(Object.entries(s.via).map(([f, p]) => [f, p && pose(p)])),
       })),
       createdAt: now,
       updatedAt: now,

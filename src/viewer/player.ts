@@ -1,5 +1,5 @@
 import type { Combination, FencerId, StepCamera } from '../model/combination.ts';
-import { ease, stepDuration, tweenCamera, tweenPose } from '../model/tween.ts';
+import { curvePose, ease, stepDuration, tweenCamera, tweenPose } from '../model/tween.ts';
 import type { Pose } from '../model/types.ts';
 
 // Playback runs along a position measured in steps: 2 is exactly step 3,
@@ -26,8 +26,12 @@ export function frameAt(c: Combination, pos: number): Frame {
   const b = c.steps[i + 1];
   if (!b || t < EPS) return { poses: a.poses, camera: a.camera };
   const k = ease(t);
+  const move = (f: FencerId) => {
+    const via = b.via?.[f];
+    return via ? curvePose(a.poses[f], via, b.poses[f], k) : tweenPose(a.poses[f], b.poses[f], k);
+  };
   return {
-    poses: { A: tweenPose(a.poses.A, b.poses.A, k), B: tweenPose(a.poses.B, b.poses.B, k) },
+    poses: { A: move('A'), B: move('B') },
     camera: tweenCamera(a.camera, b.camera, k),
   };
 }

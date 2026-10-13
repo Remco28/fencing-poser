@@ -64,7 +64,7 @@ export function useKeyboardPosing() {
         s.selectNext(e.shiftKey ? -1 : 1);
         return;
       }
-      if (key === 'Escape') return s.select(null);
+      if (key === 'Escape') return s.pathEdit ? s.exitPath() : s.select(null);
       if (key === 'x') return s.selectOpposite();
       if (key === 'r' && s.selected) return s.resetJoint(s.selected);
       if (key === 'f') return s.setActive(s.active === 'A' ? 'B' : 'A');

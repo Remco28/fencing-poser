@@ -55,6 +55,17 @@ export function StepBar() {
         <ol>
           {steps.map((step, i) => (
             <li key={step.id}>
+              {i > 0 && (
+                <button
+                  className={`path-link${s.pathEdit && s.stepIndex === i ? ' on' : ''}${step.via ? ' shaped' : ''}`}
+                  onClick={() => (s.pathEdit && s.stepIndex === i ? s.exitPath() : s.editPath(i))}
+                  disabled={playing}
+                  title={`Shape the movement from step ${i} to step ${i + 1}${step.via ? ' (shaped)' : ''}`}
+                  aria-label={`Shape the movement from step ${i} to step ${i + 1}`}
+                >
+                  {step.via ? '⤳' : '→'}
+                </button>
+              )}
               <div className={`step-chip${i === shownIndex ? ' on' : ''}${step.motionOnly ? ' via' : ''}`}>
                 <button
                   className="go"
@@ -125,9 +136,16 @@ function StepMenu({ index, last }: { index: number; last: number }) {
               <button role="menuitem" disabled={index === last} onClick={() => act(() => s.moveStep(1))}>
                 Move this step later →
               </button>
-              <button role="menuitem" onClick={() => act(() => s.setStepOptions({ motionOnly: !step.motionOnly }))}>
-                {step.motionOnly ? 'Make it a normal step' : 'Make it motion only (a via step)'}
-              </button>
+              {index > 0 && (
+                <button role="menuitem" onClick={() => act(() => s.editPath(index))}>
+                  Shape the movement into this step…
+                </button>
+              )}
+              {step.motionOnly && (
+                <button role="menuitem" onClick={() => act(() => s.setStepOptions({ motionOnly: false }))}>
+                  Make it a normal step
+                </button>
+              )}
               <button role="menuitem" className="danger" disabled={last === 0} onClick={() => setConfirm(true)}>
                 Delete this step…
               </button>

@@ -66,8 +66,16 @@ export interface Step {
   camera?: StepCamera;
   display?: StepDisplay;
   /**
-   * A via step: it shapes smooth playback (the point going under the blade)
-   * but is skipped when stepping through and in handouts.
+   * The shape of the movement into this step: a fencer's pose halfway
+   * through it. Playback curves through it, so a point can go round the
+   * opponent's blade instead of straight through. Set by dragging the
+   * point's path; absent = the plain, direct movement.
+   */
+  via?: Partial<Record<FencerId, Pose>>;
+  /**
+   * Older combinations: a step used only to shape the movement, skipped when
+   * stepping through. No longer offered (shaping the path replaces it), but
+   * still played.
    */
   motionOnly?: boolean;
   /** Smooth playback: milliseconds to move into this step from the one before. */

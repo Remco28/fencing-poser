@@ -13,7 +13,7 @@ const CARDS: { title: string; body: string }[] = [
   },
   {
     title: 'Build the combination',
-    body: '+ New step starts from the current pose. Give each step a label in the Step tab. Press Play (or Space) to watch it move, or drag the timeline.',
+    body: '+ New step starts from the current pose. Give each step a label in the Step tab. Press Play (or Space) to watch it move, or drag the timeline. Click the arrow between two steps to bend a point’s path, say under the opponent’s blade.',
   },
   {
     title: 'Share it',

@@ -20,7 +20,8 @@ Every decision that shapes the app, newest first within each group, with the rea
 | 2026-10-12 | Pistol grip by default, French selectable per fencer. | The most common grip in modern épée. |
 | 2026-10-12 | Units selectable (metric / imperial). | The piste is metric; heights are often thought of in feet and inches. |
 | 2026-10-12 | Two spine joints (stomach and chest). | Stomach tucks and lean-backs are real épée actions. |
-| 2026-10-12 | Both discrete stepping and smooth playback, switchable any time. | The coach wants both. Smooth playback needs "motion only" via steps where the path matters (a disengage goes under the blade). |
+| 2026-10-12 | Both discrete stepping and smooth playback, switchable any time. | The coach wants both. |
+| 2026-10-13 | **Paths are shaped by dragging, not with "motion only" steps.** Click the arrow between two steps, drag the ball in the middle of a point's path; a hidden halfway pose bends the movement (a smooth curve, no stop) while both steps stay as they are. Undoable; Straighten resets. "Motion only" left the interface; old combinations that used it still play. | The coach: "with 'motion only', I straight up have no idea what that toggle does", and proposed shaping the trail directly. |
 | 2026-10-12 | The en garde preset was approved as built; its angles are kept literally in `tools/fit-pose.ts`. | The coach: "your en garde pose is good the way it is." |
 | 2026-10-12 | Presets are editable: built-ins can be replaced and restored; the coach's own can be saved, renamed, deleted, replaced, and applied to either fencer. | The coach needs to change and keep their own poses. |
 | 2026-10-12 | Quinte is not built in. | The coach was not sure of the definition to use; it can be saved as a custom pose. |
@@ -47,7 +48,7 @@ Every decision that shapes the app, newest first within each group, with the rea
 |---|---|---|
 | 2026-10-13 | Removed the Joint dropdown, its sliders and the piste-position slider; the controls beside the joint took over typed angles, hips position and Straighten. | They duplicated the controls beside the joint (lean principle; coach agreed). |
 | 2026-10-13 | Stomach and chest bend as one spine by default, with a switch in the joint controls. | Bending the back is one movement to a coach; two joints made it twice the work. |
-| 2026-10-13 | The point trail comes with Ghost (no new switch), from the previous real step through any via steps. No arrows. | Shows a disengage's path; one less option. |
+| 2026-10-13 | The point trail comes with Ghost (no new switch) and always shows while shaping a path. No arrows. | Shows a disengage's path; one less option. |
 | 2026-10-13 | A timeline in the step bar scrubs the movement; Loop repeats playback. | Agreed next step; practising a phrase. |
 | 2026-10-13 | A four-card first-run tour, reopenable from Help. | New users need the handles, the joint controls, Play and Share explained once. |
 | 2026-10-12 | Keyboard posing: Tab picks a joint, A/D, S/W, Q/E move its three movements (Shift ×5, Alt fine), X jumps to the other side. | Approved by the coach; one hand on the keys, one on the mouse. |

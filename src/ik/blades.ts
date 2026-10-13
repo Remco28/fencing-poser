@@ -142,6 +142,25 @@ export function targetPoint(r: Rig, area: TargetArea, weaponSide: 'r' | 'l', fro
  * hand aims. Returns the new poses and how far short the point still is (0
  * when it lands); a distant target needs a step or a lunge first.
  */
+/**
+ * Move a fencer's arm (reach, then aim; alternated, since each moves the
+ * other) so the point lands on `target`, keeping the body as it is.
+ */
+export function pointTo(c: Combination, f: FencerId, pose: Pose, target: Vector3): { pose: Pose; miss: number } {
+  const wristName = weaponWrist(c, f);
+  const armSide = wristName === 'wrist_r' ? 'r' : 'l';
+  const build = (p: Pose) => solveRig(c.fencers[f], p, HEADING[f]);
+  const r = build(pose);
+  let p = pose;
+  let goal = target.clone().sub(r.tip.clone().sub(jointPosition(r, wristName)));
+  for (let i = 0; i < 6; i++) {
+    p = aim(reach(p, build, 'arm', armSide, goal), build, c.fencers[f], target);
+    const now = build(p);
+    goal = target.clone().sub(now.tip.clone().sub(jointPosition(now, wristName)));
+  }
+  return { pose: p, miss: build(p).tip.distanceTo(target) };
+}
+
 /** Leaning in for a touch: how far each part of the body can bend toward the target, at full lean. */
 const FULL_LEAN = { pelvis: 18, abdomen: 12, chest: 12 };
 const LEAN_STEPS = [0.25, 0.5, 0.75, 1];

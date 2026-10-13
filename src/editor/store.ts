@@ -78,6 +78,16 @@ interface EditorState extends Snapshot {
   nudge: (dofIndex: number, delta: number) => void;
   /** Replace the active fencer's pose during one drag; a whole drag undoes as one step. */
   dragPose: (pose: Pose, dragId: number) => void;
+  /**
+   * Shaping the movement into the current step: the poses are fixed and each
+   * point's path can be bent by dragging its middle.
+   */
+  pathEdit: boolean;
+  /** Start shaping the movement into step `index` (from the step before it). */
+  editPath: (index: number) => void;
+  exitPath: () => void;
+  /** Bend (pose) or straighten (null) a fencer's path into the current step; a drag undoes as one. */
+  setVia: (fencer: FencerId, pose: Pose | null, dragId?: number) => void;
   /** Stomach and chest bend as one spine (the default) or separately. */
   spineTogether: boolean;
   toggleSpineTogether: () => void;
@@ -338,6 +348,24 @@ export const useEditor = create<EditorState>((set, get) => {
           : withAngle(pose, joint, dof, value);
         return edit(s, { combination: moved(s, next) }, `${s.active}.${joint}.${dof}`);
       }),
+    pathEdit: false,
+    editPath: (index) => set({ stepIndex: index, pathEdit: true, selected: null, preview: null }),
+    exitPath: () => set({ pathEdit: false }),
+    setVia: (fencer, pose, dragId) =>
+      set((s) =>
+        edit(
+          s,
+          {
+            combination: withStep(s, (st) => {
+              const via = { ...st.via };
+              if (pose) via[fencer] = pose;
+              else delete via[fencer];
+              return { ...st, via: Object.keys(via).length ? via : undefined };
+            }),
+          },
+          dragId === undefined ? undefined : `drag.path.${dragId}`,
+        ),
+      ),
     spineTogether: true,
     toggleSpineTogether: () => set((s) => ({ spineTogether: !s.spineTogether })),
     nudge: (dofIndex, delta) =>
@@ -505,7 +533,7 @@ export const useEditor = create<EditorState>((set, get) => {
       }),
 
     goToStep: (index) =>
-      set((s) => ({ stepIndex: Math.max(0, Math.min(s.combination.steps.length - 1, index)), lastEdit: null })),
+      set((s) => ({ stepIndex: Math.max(0, Math.min(s.combination.steps.length - 1, index)), lastEdit: null, pathEdit: false })),
     addStep: () =>
       set((s) => {
         const steps = [...s.combination.steps];
