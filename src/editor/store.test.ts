@@ -673,6 +673,26 @@ describe('review round 2: one memory of kept places per fencer, shared by keys a
     expect(Math.max(at('ankle_r').distanceTo(feet[0]), at('ankle_l').distanceTo(feet[1]))).toBeLessThanOrEqual(0.0201);
   });
 
+  it('keeps the feet of each step however the coach goes back and forth between steps (R3-A)', () => {
+    state().addStep();
+    state().goToStep(0);
+    const feet = [at('ankle_r'), at('ankle_l')];
+    for (let i = 0; i < 25; i++) {
+      state().setAngle('pelvis', 'turn', angle(pose(), 'pelvis', 'turn') - 2);
+      state().goToStep(1);
+      state().setAngle('neck', 'turn', i);
+      drag('hips', [0.02, 0, 0]);
+      state().goToStep(0);
+    }
+    expect(Math.max(at('ankle_r').distanceTo(feet[0]), at('ankle_l').distanceTo(feet[1]))).toBeLessThanOrEqual(0.0201);
+    // And undo brings back each pose with its own memory: redoing the run does not drift either.
+    for (let i = 0; i < 10; i++) state().undo();
+    for (let i = 0; i < 10; i++) state().redo();
+    state().goToStep(0);
+    for (let i = 0; i < 10; i++) state().setAngle('pelvis', 'turn', angle(pose(), 'pelvis', 'turn') - 2);
+    expect(Math.max(at('ankle_r').distanceTo(feet[0]), at('ankle_l').distanceTo(feet[1]))).toBeLessThanOrEqual(0.0201);
+  });
+
   it('keeps a kept hand through any number of separate drags, of the hips or of the floor marker (R2-2)', () => {
     for (const how of ['hips', 'floor'] as const) {
       useEditor.setState(initial, true);

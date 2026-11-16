@@ -240,6 +240,92 @@ export function pointTo(
   return line.miss < kept.miss ? line : kept;
 }
 
+/** A point this near its target has landed, metres. */
+const LANDS = 0.01;
+
+/**
+ * How the hand may sit for a folded arm, as turns of the blade away from the
+ * straight line from shoulder to target, in degrees: [hand lower (+) or
+ * higher (-), hand to the outside (+) or inside (-)]. Least bent first.
+ */
+const FOLDS: [number, number][] = [
+  [20, 0], [0, 20], [-20, 0], [0, -20], [20, 20], [20, -20], [-20, 20],
+  [40, 0], [0, 40], [40, 20], [20, 40], [-40, 0], [0, -40], [40, -20], [-20, 40],
+  [60, 0], [40, 40], [60, 20], [60, -20], [0, 60], [60, 40], [75, 0], [75, 30],
+];
+
+/**
+ * Every way the weapon arm is tried to put the point on `target`, with the
+ * body as it is:
+ * 1. the blade kept at its angle and the hand carried there;
+ * 2. arm and blade in one line from the shoulder, a direct thrust;
+ * 3. for a target that is in reach but nearer than those manage, the arm
+ *    folded: the hand placed a blade's length from the target, somewhere the
+ *    arm can get to, lower, higher or to one side of the straight line, tried
+ *    from the least bent to the most, and if the shoulder cannot do that with
+ *    the elbow as it points, with the elbow down or out.
+ * The first that lands wins; if none does, the nearest.
+ */
+export function armTo(c: Combination, f: FencerId, body: Pose, target: Vector3): { pose: Pose; miss: number } {
+  const setup = c.fencers[f];
+  const wristName = weaponWrist(c, f);
+  const armSide = wristName === 'wrist_r' ? 'r' : 'l';
+  const build = (p: Pose) => solveRig(setup, p, HEADING[f]);
+  const r = build(body);
+  // Reach and aim pull on each other (aiming changes where the hand must
+  // be), so alternate them a few times and keep the best, not the last.
+  const settle = (wristGoal: Vector3, pole?: Vector3) => {
+    let p = body;
+    let goal = wristGoal;
+    let best = { pose: body, miss: r.tip.distanceTo(target) };
+    for (let i = 0; i < 6; i++) {
+      p = aim(reach(p, build, 'arm', armSide, goal, pole), build, setup, target);
+      const now = build(p);
+      const miss = now.tip.distanceTo(target);
+      if (miss < best.miss) best = { pose: p, miss };
+      if (miss < 0.003) break;
+      goal = target.clone().sub(now.tip.clone().sub(jointPosition(now, wristName)));
+    }
+    return best;
+  };
+  const wrist = jointPosition(r, wristName);
+  const shoulder = jointPosition(r, `shoulder_${armSide}`);
+  const blade = r.tip.distanceTo(wrist);
+
+  let best = settle(target.clone().sub(r.tip.clone().sub(wrist)));
+  if (best.miss < LANDS) return best;
+  const line = settle(target.clone().sub(target.clone().sub(shoulder).setLength(blade)));
+  if (line.miss < best.miss) best = line;
+  if (best.miss < LANDS) return best;
+
+  // Folded. No fold helps a target further than arm and blade together.
+  const arm = r.layout.upperArm + r.layout.forearm;
+  const toTarget = target.clone().sub(shoulder);
+  if (toTarget.length() > arm + blade) return best;
+  const along = toTarget.clone().normalize();
+  const up = new Vector3(0, 1, 0);
+  const across = new Vector3().crossVectors(along, up);
+  if (across.lengthSq() < 1e-6) return best;
+  across.normalize();
+  const out = outsideOf(c, f);
+  // Which way round `up` turns the blade so the hand goes to the fencer's outside.
+  const outward = Math.sign(new Vector3().crossVectors(up, along).dot(out)) || 1;
+  const hands = FOLDS.map(([lower, outside]) => {
+    // The blade's direction, hand to target: tipped up puts the hand lower, turned away from `out` puts it outside.
+    const dir = along.clone().applyAxisAngle(across, (lower * Math.PI) / 180).applyAxisAngle(up, (-outward * outside * Math.PI) / 180);
+    return target.clone().addScaledVector(dir, -blade);
+  }).filter((hand) => hand.distanceTo(shoulder) < arm - 0.005);
+  const down = new Vector3(0, -1, 0);
+  for (const pole of [undefined, down.clone().add(out), down, out]) {
+    for (const hand of hands) {
+      const tried = settle(hand, pole);
+      if (tried.miss < best.miss) best = tried;
+      if (best.miss < LANDS) return best;
+    }
+  }
+  return best;
+}
+
 /** Leaning in for a touch: how far each part of the body can bend toward the target, at full lean. */
 const FULL_LEAN = { pelvis: 18, abdomen: 12, chest: 12 };
 const LEAN_STEPS = [0.25, 0.5, 0.75, 1];
@@ -262,7 +348,8 @@ function leaned(pose: Pose, k: number): Pose {
 
 /**
  * Bring `mover`'s point onto a target on the opponent: the arm reaches and the
- * hand aims; if the arm alone falls short, the body leans in, step by step,
+ * hand aims (every way `armTo` knows, a folded arm included for a near
+ * target); if the arm alone falls short, the body leans in, step by step,
  * but never so far that the fencer would be off balance. Returns the new
  * poses and how far short the point still is (0 when it lands); a distant
  * target needs a step or a lunge first.
@@ -271,34 +358,8 @@ export function touch(c: Combination, poses: Poses, mover: FencerId, area: Targe
   const opp = other(mover);
   const side = c.fencers[opp].handedness === 'right' ? 'r' : 'l';
   const target = targetPoint(rig(c, poses, opp), area, side, rig(c, poses, mover).tip);
-  const wristName = weaponWrist(c, mover);
-  const armSide = wristName === 'wrist_r' ? 'r' : 'l';
   const build = (p: Pose) => solveRig(c.fencers[mover], p, HEADING[mover]);
-
-  // Reach and aim pull on each other (aiming changes where the hand must be),
-  // so alternate them a few times; the point settles on the target.
-  const settle = (start: Pose, wristTarget: Vector3) => {
-    let p = start;
-    let goal = wristTarget;
-    for (let i = 0; i < 6; i++) {
-      p = aim(reach(p, build, 'arm', armSide, goal), build, c.fencers[mover], target);
-      const now = build(p);
-      goal = target.clone().sub(now.tip.clone().sub(jointPosition(now, wristName)));
-    }
-    return { pose: p, miss: build(p).tip.distanceTo(target) };
-  };
-
-  // From a body pose: first keep the blade's angle and carry the hand; if that
-  // cannot land, put arm and blade in one line from the shoulder, as in a
-  // direct thrust. Keep whichever gets closer.
-  const fromBody = (body: Pose) => {
-    const r = build(body);
-    const wrist = jointPosition(r, wristName);
-    const kept = settle(body, target.clone().sub(r.tip.clone().sub(wrist)));
-    const shoulder = jointPosition(r, `shoulder_${armSide}`);
-    const line = settle(body, target.clone().sub(target.clone().sub(shoulder).setLength(r.tip.distanceTo(wrist))));
-    return kept.miss <= line.miss ? kept : line;
-  };
+  const fromBody = (body: Pose) => armTo(c, mover, body, target);
 
   let best = fromBody(poses[mover]);
   for (const k of LEAN_STEPS) {

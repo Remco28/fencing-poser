@@ -154,13 +154,6 @@ interface EditorState extends Snapshot {
   /** What stays where it is while something else moves (editor state, never saved). */
   keep: Keep;
   toggleKeep: (key: keyof Keep) => void;
-  /**
-   * Per fencer, where their kept things belong: keys, typed angles, steps and
-   * drags all measure from here, so no run of them can walk a kept foot away
-   * a little at a time. Each memory holds only for the exact pose it was made
-   * for (see `KeptRef`), so nothing has to remember to clear it.
-   */
-  keptRefs: Partial<Record<FencerId, KeptRef>>;
   /** The drag now in progress and the pose it last gave its fencer: anything else editing that fencer in between ends the drag. */
   dragging: { id: number; pose: Pose } | null;
   /** Set when the last key or typed edit was stopped short by something kept ("A’s feet are kept in place"); else null. */
@@ -269,19 +262,23 @@ interface EditorState extends Snapshot {
 const HISTORY_LIMIT = 200;
 
 /**
- * Where one fencer's kept things belong. It holds only while that fencer's
- * pose, setup and the keep switches are the very objects it was made for:
- * this store replaces those, never changes them in place, so anything else
- * that touches the fencer (a pose, an action, a pushed blade, undo, another
- * step, a change of build, a switch) makes it not match, and editing the
- * other fencer leaves it alone.
+ * Where a fencer's kept things belong, remembered for each pose separately:
+ * keys, typed angles, steps and drags all measure from here, so no run of
+ * them can walk a kept foot away a little at a time. The memory belongs to
+ * one pose object and counts only while that fencer's setup and the keep
+ * switches are the very objects it was made with. This store replaces poses,
+ * setups and switches, never changes them in place, so anything else that
+ * touches the fencer (a pose click, an action, a pushed blade, a change of
+ * build, a switch) leaves a pose with no memory, and editing the other
+ * fencer, or the same fencer in another step, leaves this one's alone.
+ * Editor memory only: it is never saved, and goes when its pose is dropped.
  */
 interface KeptRef {
-  pose: Pose;
   setup: FencerSetup;
   keep: Keep;
   spots: Spots;
 }
+const keptMemory = new WeakMap<Pose, KeptRef>();
 
 /** What a drag tells the store about itself with each move. */
 export interface DragFrom {
@@ -295,17 +292,15 @@ export interface DragFrom {
   cut?: boolean;
 }
 
-/** The spots remembered for this fencer, if the memory is for exactly this pose, setup and switches. */
+/** The spots remembered for this fencer's present pose, if they were remembered with this setup and these switches. */
 function spotsRemembered(s: EditorState, f: FencerId): Spots {
-  const ref = s.keptRefs[f];
-  const ok = ref && ref.pose === currentStep(s).poses[f] && ref.setup === s.combination.fencers[f] && ref.keep === s.keep;
-  return ok ? ref.spots : {};
+  const ref = keptMemory.get(currentStep(s).poses[f]);
+  return ref && ref.setup === s.combination.fencers[f] && ref.keep === s.keep ? ref.spots : {};
 }
 
-/** The memory of kept spots after `f` was given the pose `now`; unchanged if nothing was committed (`now` is still `was`). */
-function rememberSpots(s: EditorState, f: FencerId, was: Pose, now: Pose, spots: Spots): Partial<EditorState> {
-  if (now === was) return {};
-  return { keptRefs: { ...s.keptRefs, [f]: { pose: now, setup: s.combination.fencers[f], keep: s.keep, spots } } };
+/** Remember the kept spots for the pose `now` that `f` was just given; nothing to do if nothing was committed (`now` is still `was`). */
+function rememberSpots(s: EditorState, f: FencerId, was: Pose, now: Pose, spots: Spots): void {
+  if (now !== was) keptMemory.set(now, { setup: s.combination.fencers[f], keep: s.keep, spots });
 }
 
 const heldBackBy = (f: FencerId, kept: Kept[]) => {
@@ -336,7 +331,8 @@ function keyed(s: EditorState, held: ReturnType<typeof keyEdit>, key?: string): 
   const was = activePose(s);
   const done = edit(s, { combination: moved(s, held.pose) }, key);
   const now = done.combination ? done.combination.steps[s.stepIndex].poses[f] : was;
-  return { ...done, heldBack: held.heldBack, ...rememberSpots(s, f, was, now, held.spots) };
+  rememberSpots(s, f, was, now, held.spots);
+  return { ...done, heldBack: held.heldBack };
 }
 
 /** A pose click that can still be dialled back. */
@@ -543,7 +539,6 @@ function fresh(combination: Combination): Partial<EditorState> {
     lastEdit: null,
     selected: null,
     active: 'A',
-    keptRefs: {},
     dragging: null,
     heldBack: null,
     dial: null,
@@ -726,19 +721,14 @@ export const useEditor = create<EditorState>((set, get) => {
         if (was !== (s.dragging?.id === dragId ? s.dragging.pose : from.pose)) return {};
         const done = edit(s, { combination: moved(s, pose) }, `drag.${dragId}`);
         const now = done.combination ? done.combination.steps[s.stepIndex].poses[f] : was;
-        return {
-          ...done,
-          dragging: { id: dragId, pose: now },
-          heldBack: from.cut ? heldBackBy(f, Object.keys(from.spots ?? {}) as Kept[]) : null,
-          ...(from.spots && rememberSpots(s, f, was, now, from.spots)),
-        };
+        if (from.spots) rememberSpots(s, f, was, now, from.spots);
+        return { ...done, dragging: { id: dragId, pose: now }, heldBack: from.cut ? heldBackBy(f, Object.keys(from.spots ?? {}) as Kept[]) : null };
       }),
     spotsFor: (fencer, kept) => {
       const s = get();
       return spotsOf(withSpots(placesOf(currentStep(s).poses[fencer], s.combination.fencers[fencer], HEADING[fencer]), kept, spotsRemembered(s, fencer)));
     },
     keep: remembered('keep', DEFAULT_KEEP),
-    keptRefs: {},
     dragging: null,
     heldBack: null,
     toggleKeep: (key) =>

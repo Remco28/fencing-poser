@@ -17,7 +17,7 @@ import { poseFromPreset } from '../presets/library.ts';
 import { jointPosition, solveRig, type Rig } from '../rig/kinematics.ts';
 import { frontToe } from '../scene/measure.ts';
 import { frameAt } from '../viewer/player.ts';
-import { layAgainst, outsideOf, pointTo, pushBlades, swingBlade, targetPoint, touch } from '../ik/blades.ts';
+import { armTo, layAgainst, outsideOf, pointTo, pushBlades, swingBlade, targetPoint, touch } from '../ik/blades.ts';
 import { editKept, pick, placesOf } from '../ik/drag.ts';
 import { pinFor } from '../ik/path.ts';
 
@@ -387,14 +387,15 @@ function beat(c: Combination, poses: Poses, f: FencerId, line: Line): Poses | nu
 
 // Hit ------------------------------------------------------------------------
 
-/** Did a hit fall short because the target is nearer than the blade is long? */
+/** Did a hit fall short because the target is too near, not too far? The point has gone past it, or it is nearer than the blade is long. */
 function tooClose(c: Combination, poses: Poses, f: FencerId, area: TargetArea): boolean {
   const opp = other(f);
   const mine = rigOf(c, f, poses[f]);
   const s = weaponSide(c, f);
   const target = targetPoint(rigOf(c, opp, poses[opp]), area, weaponSide(c, opp), mine.tip);
   const blade = mine.tip.distanceTo(jointPosition(mine, `wrist_${s}`));
-  return target.distanceTo(jointPosition(mine, `shoulder_${s}`)) < blade + 0.1;
+  const past = (mine.tip.x - target.x) * FORWARD[f] > 0.05;
+  return past || target.distanceTo(jointPosition(mine, `shoulder_${s}`)) < blade + 0.1;
 }
 
 function hit(c: Combination, poses: Poses, f: FencerId, area: TargetArea, w: HitWith, presets?: PresetPose[]): ActionResult {
@@ -402,50 +403,86 @@ function hit(c: Combination, poses: Poses, f: FencerId, area: TargetArea, w: Hit
   return r.short ? { ...r, close: tooClose(c, r.poses, f, area) } : r;
 }
 
+/**
+ * A hit, by these rules:
+ * - it never moves the feet it stands on (`standing`);
+ * - it never ends behind where the fencer already is, or past the opponent's
+ *   front toe: footwork that would is not tried;
+ * - with a lunge or a flèche it goes only as far as the hit needs;
+ * - if the footwork cannot land it but the arm can from where the fencer
+ *   stands, the arm does it (and, if that was for want of room, says so);
+ * - if nothing lands, the fencer is not sent forward past the target: they
+ *   stay, unless going forward leaves the point nearer and still short.
+ */
 function hitBy(c: Combination, poses: Poses, f: FencerId, area: TargetArea, w: HitWith, presets?: PresetPose[]): ActionResult {
-  const done = (pose: Pose, short: number): ActionResult => ({ poses: pushBlades(c, poses, { ...poses, [f]: pose }, f), short });
-  /** No room for the footwork asked for: the arm alone, and say so. */
-  const armOnly = (): ActionResult => ({ ...hitBy(c, poses, f, area, 'arm', presets), cramped: 'short' });
-  if (w === 'arm') {
-    const r = standing(c, poses, f, area, poses[f]);
-    return done(r.pose, r.short);
-  }
-  if (w === 'lunge') {
-    // Only as deep a lunge as the hit needs: a near target (the hand, the
-    // arm) is hit with a short lunge, not by folding the arm up in a full
-    // one; and never so deep that the finished hit has its front toe past
-    // the opponent's.
-    let best: { pose: Pose; short: number } | null = null;
-    for (const depth of LUNGE_DEPTHS) {
-      const lunged = lungePose(c, f, poses[f], depth, presets);
-      if (room(c, poses, f, lunged) < FITS) break;
-      const r = standing(c, poses, f, area, lunged);
-      if (room(c, poses, f, r.pose) < FITS) continue;
-      if (!best || r.short < best.short) best = r;
-      if (r.short === 0) break;
-    }
-    return best ? done(best.pose, best.short) : armOnly();
-  }
-  // Flèche: from where en garde over the back foot stands, run forward only
-  // as far as it takes to land, and never past the opponent's toe. (The feet
-  // of a flèche are leaving the floor: they are left as the reach has them.)
-  const fleche = flecheFrom(c, f, poses[f], presets);
   const fwd = FORWARD[f];
-  const x0 = fleche.root.x;
-  const gap = room(c, poses, f, fleche);
-  if (gap < FITS) return armOnly();
-  const limit = Math.max(0, Math.min(FLECHE_MAX, gap, PISTE_HALF - x0 * fwd));
-  const tryAt = (x: number) => {
-    const r = touch(c, { ...poses, [f]: at(fleche, x) }, f, area);
-    return { r, fits: room(c, poses, f, r.poses[f]) >= FITS };
+  const done = (r: { pose: Pose; short: number }, cramped?: Cramped): ActionResult => ({
+    poses: pushBlades(c, poses, { ...poses, [f]: r.pose }, f),
+    short: r.short,
+    ...(cramped && { cramped }),
+  });
+  // From where the fencer stands, with the arm alone.
+  const here = standing(c, poses, f, area, poses[f]);
+  if (w === 'arm') return done(here);
+
+  const toe = (p: Pose) => frontToe(rigOf(c, f, p), f).x * fwd;
+  const hips = (p: Pose) => p.root.x * fwd;
+  const now = poses[f];
+  /** Would a miss from this pose be cured by going further forward? (Not if the point is already past the target.) */
+  const stillShort = (p: Pose) => !tooClose(c, { ...poses, [f]: p }, f, area);
+  let noRoom = false;
+  /** The best the footwork has done so far. */
+  const tried: { best: { pose: Pose; short: number } | null } = { best: null };
+  const consider = (r: { pose: Pose; short: number }) => {
+    if (!tried.best || r.short < tried.best.short) tried.best = r;
+    return r.short === 0;
   };
-  const x = edge((x) => {
-    const t = tryAt(x);
-    return t.fits && t.r.short === 0;
-  }, x0, fwd, false, limit);
-  const end = tryAt(x ?? x0 + fwd * limit);
-  // Leaning in at the very end of the run would carry the toe past: no room after all.
-  return end.fits ? done(end.r.poses[f], end.r.short) : armOnly();
+
+  if (w === 'lunge') {
+    // Only lunges that go forward from here: a fencer already lunging is not drawn back into a shallower one.
+    for (const depth of LUNGE_DEPTHS) {
+      const lunged = lungePose(c, f, now, depth, presets);
+      if (toe(lunged) < toe(now) + 0.02) continue;
+      if (room(c, poses, f, lunged) < FITS) {
+        noRoom = true;
+        break;
+      }
+      const r = standing(c, poses, f, area, lunged);
+      if (room(c, poses, f, r.pose) < FITS) {
+        noRoom = true;
+        continue;
+      }
+      if (consider(r)) return done(r);
+    }
+  } else {
+    // A flèche runs forward from where en garde over the back foot stands, or from where the hips are if they are further on.
+    const from = flecheFrom(c, f, now, presets);
+    const x0 = Math.max(hips(from), hips(now)) * fwd;
+    const start = at(from, x0);
+    const gap = room(c, poses, f, start);
+    if (gap < FITS) noRoom = true;
+    else {
+      const limit = Math.max(0, Math.min(FLECHE_MAX, gap, PISTE_HALF - x0 * fwd));
+      const tryAt = (x: number) => {
+        const r = touch(c, { ...poses, [f]: at(from, x) }, f, area);
+        return { pose: r.poses[f], short: r.short, fits: room(c, poses, f, r.poses[f]) >= FITS };
+      };
+      const x = edge((x) => {
+        const t = tryAt(x);
+        return t.fits && t.short === 0;
+      }, x0, fwd, false, limit);
+      const end = tryAt(x ?? x0 + fwd * limit);
+      if (!end.fits) noRoom = true;
+      else if (consider(end)) return done(end);
+    }
+  }
+
+  // The footwork did not land it. The arm alone, if that does.
+  if (here.short === 0) return done(here, noRoom ? 'short' : undefined);
+  // Nothing lands. Going forward is kept only if it leaves the point nearer and still short of the target, not past it.
+  const forward = tried.best;
+  if (forward && forward.short < here.short - 0.01 && stillShort(forward.pose)) return done(forward);
+  return done(here, noRoom ? 'short' : undefined);
 }
 
 /**
@@ -465,7 +502,7 @@ function standing(c: Combination, poses: Poses, f: FencerId, area: TargetArea, s
   // The feet never moved (no lean was needed): the reach stands as it is.
   if (planted === reached.poses[f]) return { pose: planted, short: reached.short };
   const target = targetPoint(rigOf(c, opp, poses[opp]), area, weaponSide(c, opp), rigOf(c, f, planted).tip);
-  const aimed = pointTo(c, f, planted, target);
+  const aimed = armTo(c, f, planted, target);
   return { pose: aimed.pose, short: aimed.miss < 0.02 ? 0 : aimed.miss };
 }
 

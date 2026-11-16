@@ -45,7 +45,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Export**: captioned picture, PDF handout (two steps per page), video of smooth playback, combination file. `src/export/`
 
 ### Quality
-- 317 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, dragging, actions, blades, playback, links, merging, store); run `npm test`.
+- 322 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, dragging, actions, blades, playback, links, merging, store); run `npm test`.
 - Visual checks are done in a headless browser through a dev-only `window.__editor` hook.
 
 ## Testing with people
@@ -81,9 +81,9 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - The flèche, prime, stomach-tuck and lean-back presets are drafts; the coach may want to replace them.
 - The named distances sit close together (front feet 0.86 m, 1.31 m and 1.66 m apart for two 1.78 m fencers) because the lunge preset only carries the front foot 0.53 m. They are worked out from the Lunge pose, so replacing that pose with a deeper lunge moves them.
 - A low parry (2, 7, 8) chosen against a high attack does not find the blade, and a parry in a lunge is low because the whole body is.
-- A hit asked for from too close cannot land (the blade is longer than the gap); the app says so rather than stepping the fencer back.
+- A hit on a target nearer than a folded arm can manage (the opponent's hand or arm with the toes under about 40 cm apart) cannot land; the app says it is too close rather than stepping the fencer back.
 - A known old bug is filed in `BUGS.md`: clicking a pose the fencer already holds adds a history entry that changes nothing.
-- At short distance a hit to the mask now falls about 2 cm short, because the hit no longer moves the feet to get there; step in or use a lunge.
+- Three small known problems from the last review round are filed in `BUGS.md` (two view saves within a second undo as one; Space pressed mid-drag in the sketch; the "held back" line lingering after a pose click).
 - After a beat the blades stay in contact (the picture is the moment of the beat); a flèche hit from the en garde lines needs nearly its 3 m limit.
 - From above, the sketch draws the fencers small, because the piste is long.
 - With the sketch open on a small screen the 3D view is short; Fit both (Z) reframes it.
