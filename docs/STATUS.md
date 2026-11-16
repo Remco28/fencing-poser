@@ -58,6 +58,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **The simplify pass (2026-11-16) is live and untested by the coach.** It was pushed straight to the site with no review round, at the coach's request: he tries it first, then it is fixed. It cut the ready-made poses, most one-click actions, the distance buttons, the view lock and the view per step; it added automatic footwork in playback, one-click saved poses and the combination menus.
 - Once the coach confirms the direction: delete what the app no longer reaches (in `src/actions/actions.ts`: footwork, distance, parry, engage, beat, extend, hits with a lunge or flèche, the labels; they are still exercised by tests) and the built-in poses other than en garde (`src/presets/builtin.ts`).
 - Review the pass (it has had the author's tests and a browser check only).
+- **The look is settled (2026-11-16); more visual work is for another time.** Known and left for then: the PDF handout still uses Helvetica, not the app's fonts; the top bar wraps to two rows in a window narrower than about 1100 px; nothing has been tried on a real phone.
 
 ## Deliberately not done
 

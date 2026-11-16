@@ -11,7 +11,7 @@ Every decision that shapes the app, newest first within each group, with the rea
 
 ## Look and layout
 
-Agreed with the coach on 2026-11-15, from mock-ups (`docs/mockups/2026-11-redesign/`). Colours for the page are the variables at the top of `src/styles.css`; their twins for the 3D scene are in `src/design.ts`. Add a value there under a name; never type a colour or size in place.
+Agreed with the coach on 2026-11-15, from mock-ups (`docs/mockups/2026-11-redesign/`). **Settled on 2026-11-16**: the coach used it on the live site and chose to keep it. This is the look to build on; change a row here only with him. Colours for the page are the variables at the top of `src/styles.css`; their twins for the 3D scene are in `src/design.ts`. Add a value there under a name; never type a colour or size in place.
 
 | Date | Decision | Why |
 |---|---|---|
