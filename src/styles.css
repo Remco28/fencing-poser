@@ -1305,6 +1305,15 @@ input.hud-input {
   text-align: center;
 }
 
+.hud-held {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-small);
+  background: var(--quiet);
+  color: var(--ink-2);
+  font-size: var(--text-small);
+}
+
 .hud-clock strong {
   color: var(--accent);
 }

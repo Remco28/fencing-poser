@@ -180,6 +180,8 @@ function Prompt({ posing }: { posing: boolean }) {
   const idle = useEditor((s) => !s.preview && !s.pathEdit);
   const locked = useEditor((s) => s.cameraLocked);
   const stop = useEditor((s) => s.stopPreview);
+  // Why a step along the piste stopped short, when no joint's controls are open to say so.
+  const heldBack = useEditor((s) => (s.selected ? null : s.heldBack));
   if (running)
     return (
       <button className="prompt stop" onClick={stop} title="Stop playing (Space or Esc)">
@@ -187,6 +189,12 @@ function Prompt({ posing }: { posing: boolean }) {
       </button>
     );
   if (!idle) return null;
+  if (heldBack)
+    return (
+      <p className="prompt" role="status">
+        {heldBack}
+      </p>
+    );
   if (locked)
     return (
       <p className="prompt">

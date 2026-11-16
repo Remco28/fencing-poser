@@ -198,6 +198,12 @@ export function JointHud({ el }: { el: RefObject<HTMLDivElement | null> }) {
           Thumb at <strong>{clock.hour} o’clock</strong>
         </p>
       )}
+      {/* Why a joint stopped short: something is kept in place. */}
+      {s.heldBack && (
+        <p className="hud-held" role="status">
+          {s.heldBack}
+        </p>
+      )}
       <p className="hud-mods">
         <span className={s.held.shift ? 'held' : ''}>
           <kbd>Shift</kbd> {STEP.big}°
