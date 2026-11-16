@@ -27,7 +27,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Steps** with label, notes, targets and timing; new steps copy the current one; the step bar with Play and a ⋯ menu per step. `src/editor/StepBar.tsx`, `src/model/combination.ts`
 - **Path shaping**: click the arrow between two steps (or, with Ghost on, the "Shape the path" button or the red trail) and grab a point's red path anywhere to bend the movement (e.g. under the blade), pinning it in up to three places (double-click a ring to remove it); stored as pins (`Step.pins`: a moment and a change to the arm's joints), carried through by a smooth spline so the point glides. `src/ik/path.ts`, `src/ik/PathHandles.tsx`, `src/model/tween.ts`
 - **Undo/redo** for every change; a drag or a held key undoes as one step. `src/editor/store.ts`
-- **Camera**: drag turns, right-drag pans, scroll zooms to the pointer; Side, Overhead, Fit both, and per fencer Behind and Zoom; Lock, One view for all steps; each step keeps its view. `src/scene/CameraRig.tsx`, `FitRig.tsx`
+- **Camera**: drag turns, right-drag pans, scroll zooms to the pointer; Side, Overhead, Fit both, and per fencer Behind and Zoom; Lock. The working view is the coach's own; what students see for a step is set on purpose ("Use this view for students", "Students' view", One view for all steps). `src/scene/CameraRig.tsx`, `FitRig.tsx`, store `setShot` / `showShot` / `clearShot`
 - **Show**: distances (feet, point to opponent, "Touch"), ghost of the previous step, labels. `src/scene/measure.ts`
 - **Play** in the editor (Space), a **timeline** to scrub between steps, and **Loop**. `src/editor/StepBar.tsx`, `src/scene/playback.tsx`, `src/viewer/player.ts`
 - **Point trail** with the ghost and while shaping a path. `src/scene/PointTrail.tsx`
@@ -39,7 +39,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Export**: captioned picture, PDF handout (two steps per page), video of smooth playback, combination file. `src/export/`
 
 ### Quality
-- 243 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, dragging, actions, blades, playback, links, merging, store); run `npm test`.
+- 248 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, dragging, actions, blades, playback, links, merging, store); run `npm test`.
 - Visual checks are done in a headless browser through a dev-only `window.__editor` hook.
 
 ## Testing with people

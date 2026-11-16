@@ -20,7 +20,7 @@ import { PathHandles } from '../ik/PathHandles.tsx';
 import { BalanceMark } from '../scene/BalanceMark.tsx';
 import { balanceOf } from '../rig/balance.ts';
 import { formatDistance } from '../model/units.ts';
-import { currentStep, useEditor } from './store.ts';
+import { currentStep, hasShot, useEditor, viewIsShot } from './store.ts';
 import { Switch } from '../ui/Switch.tsx';
 import { CameraDriver, Ticker } from '../scene/playback.tsx';
 import { frameAt, keyAt } from '../viewer/player.ts';
@@ -55,6 +55,8 @@ export function Stage() {
   })();
   const previous = !playing && previousIndex >= 0 ? s.combination.steps[previousIndex] : null;
   const display = step.display ?? {};
+  // Is the coach looking from where students will see this step?
+  const onShot = viewIsShot(s);
   const showPast = !!previous && (shaping || !!display.ghost);
   const m = useMemo(() => (display.distance ? measure(s.combination, step) : null), [display.distance, s.combination, step]);
   // Off-balance warnings, for poses the coach makes (not while playing).
@@ -178,7 +180,7 @@ export function Stage() {
         />
         {playing && <Ticker onTick={s.tickPreview} />}
         {playing && <CameraDriver view={frame?.camera ?? viewFor('side', step)} />}
-        <CameraRig flight={s.flight} onView={s.setStepCamera} />
+        <CameraRig flight={s.flight} onView={s.setView} />
         <FitRig request={s.fitRequest} points={fitPoints} onView={s.requestView} />
         <HudTracker anchor={selectedPoint} avoid={hudAvoid} el={hud} leader={leader} />
       </Canvas>
@@ -263,13 +265,34 @@ export function Stage() {
             </span>
           ))}
           <span className="divider" />
+          <button
+            onClick={s.setShot}
+            disabled={playing || onShot}
+            title={
+              onShot
+                ? 'Students see this step from here'
+                : s.combination.sharedView
+                  ? 'Students will see every step from where you are looking now'
+                  : 'Students will see this step from where you are looking now. Looking around while you work never changes it.'
+            }
+          >
+            {onShot ? '✓ Students see this view' : 'Use this view for students'}
+          </button>
+          <button
+            onClick={s.showShot}
+            disabled={playing || s.cameraLocked || onShot || !hasShot(step)}
+            title={hasShot(step) ? 'Look from where students see this step' : 'No view chosen for this step yet: students get the side view'}
+          >
+            Students’ view
+          </button>
+          <span className="divider" />
           <Switch on={s.cameraLocked} onToggle={s.toggleCameraLock} title="When on, the camera cannot be moved by accident (L)">
             Lock
           </Switch>
           <Switch
             on={!!s.combination.sharedView}
             onToggle={s.toggleSharedView}
-            title="When on, every step uses this one view: moving the camera on any step moves it for all"
+            title="When on, students see every step from the same view"
           >
             One view for all steps
           </Switch>

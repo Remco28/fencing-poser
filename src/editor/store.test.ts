@@ -3,7 +3,7 @@ import { START_X } from '../model/combination.ts';
 import { mirrorPose } from '../model/mirror.ts';
 import { angle } from '../model/types.ts';
 import { BUILT_IN_PRESETS } from '../presets/builtin.ts';
-import { activePose, currentStep, useEditor } from './store.ts';
+import { activePose, currentStep, hasShot, useEditor, viewIsShot } from './store.ts';
 
 const initial = useEditor.getState();
 const enGarde = BUILT_IN_PRESETS.find((p) => p.id === 'en-garde')!;
@@ -303,5 +303,62 @@ describe('actions', () => {
     expect(currentStep(state()).pins?.A).toHaveLength(1);
     state().shapeActivePath('direct');
     expect(currentStep(state()).pins).toBeUndefined();
+  });
+});
+
+describe('the working view and what students see', () => {
+  const here = { position: [1, 2, 3], target: [0, 1, 0] } as const;
+  const there = { position: [4, 2, -3], target: [1, 1, 0] } as const;
+  const look = (v: typeof here | typeof there) => state().setView({ position: [...v.position], target: [...v.target] });
+
+  it('never changes a step by looking around', () => {
+    const before = state().combination;
+    look(here);
+    look(there);
+    expect(state().combination).toBe(before);
+    expect(hasShot(currentStep(state()))).toBe(false);
+  });
+
+  it('uses the working view for students only when asked, as one undo step', () => {
+    look(here);
+    expect(viewIsShot(state())).toBe(false);
+    state().setShot();
+    expect(currentStep(state()).camera).toEqual(here);
+    expect(viewIsShot(state())).toBe(true);
+    look(there);
+    expect(currentStep(state()).camera).toEqual(here);
+    expect(viewIsShot(state())).toBe(false);
+    state().undo();
+    expect(hasShot(currentStep(state()))).toBe(false);
+  });
+
+  it('sets and clears every step at once with one view for all', () => {
+    state().addStep();
+    state().toggleSharedView();
+    look(there);
+    state().setShot();
+    expect(state().combination.steps.map((s) => s.camera)).toEqual([there, there]);
+    state().clearShot();
+    expect(state().combination.steps.some(hasShot)).toBe(false);
+  });
+
+  it('keeps the working view when moving between steps, and can fly to the step’s shot', () => {
+    look(here);
+    state().setShot();
+    state().addStep();
+    look(there);
+    const flights = state().flight?.id ?? 0;
+    state().goToStep(0);
+    expect(state().flight?.id ?? 0).toBe(flights);
+    state().showShot();
+    expect(state().flight?.camera).toEqual(here);
+  });
+
+  it('goes back to the working view when playing stops', () => {
+    state().addStep();
+    look(there);
+    state().startPreview();
+    state().stopPreview();
+    expect(state().flight?.camera).toEqual(there);
   });
 });

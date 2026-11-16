@@ -13,7 +13,7 @@ interface Controls {
 export interface Flight {
   camera: StepCamera;
   id: number;
-  /** Report the view once there (a chosen view), or not (returning to a saved one). */
+  /** No longer used: every landing is reported. Kept so older callers still fit. */
   save: boolean;
 }
 
@@ -31,8 +31,9 @@ export function fitToAspect(view: StepCamera, aspect: number): StepCamera {
 }
 
 /**
- * Glides the camera to each new flight's view, and reports the view whenever
- * the coach finishes orbiting by hand or a saving flight lands.
+ * Glides the camera to each new flight's view, and reports where the camera
+ * is whenever it comes to rest: once at the start, after the coach turns it
+ * by hand, and when a flight lands.
  */
 export function CameraRig({
   flight,
@@ -47,9 +48,7 @@ export function CameraRig({
   const camera = useThree((s) => s.camera);
   const aspect = useThree((s) => s.size.width / s.size.height);
   const controls = useThree((s) => s.controls) as unknown as Controls | null;
-  const moving = useRef<{ fromPos: Vector3; toPos: Vector3; fromTarget: Vector3; toTarget: Vector3; t: number; save: boolean } | null>(
-    null,
-  );
+  const moving = useRef<{ fromPos: Vector3; toPos: Vector3; fromTarget: Vector3; toTarget: Vector3; t: number } | null>(null);
   const report = useRef(onView);
   report.current = onView;
   const current = () => ({ position: camera.position.toArray(), target: controls!.target.toArray() }) as StepCamera;
@@ -63,7 +62,6 @@ export function CameraRig({
       fromTarget: controls.target.clone(),
       toTarget: new Vector3(...view.target),
       t: 0,
-      save: flight.save,
     };
     // Refit only when a new flight starts, not on every resize.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -71,6 +69,7 @@ export function CameraRig({
 
   useEffect(() => {
     if (!controls) return;
+    report.current?.(current());
     const onEnd = () => {
       if (!moving.current) report.current?.(current());
     };
@@ -89,7 +88,7 @@ export function CameraRig({
     controls.update();
     if (m.t === 1) {
       moving.current = null;
-      if (m.save) report.current?.(current());
+      report.current?.(current());
     }
   });
 

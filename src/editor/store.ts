@@ -183,14 +183,23 @@ interface EditorState extends Snapshot {
   applyPreset: (preset: PresetPose, part?: PresetPart) => void;
   presetPart: PresetPart;
   setPresetPart: (part: PresetPart) => void;
-  /** Remember the view for the current step. Not an undoable edit. */
-  setStepCamera: (camera: StepCamera) => void;
   /**
-   * Where the camera should fly next. Moving between steps flies to the
-   * step's saved view; choosing a view flies there and saves it to the step.
+   * The view the coach is working in: wherever the camera was last left.
+   * Editor state only. What students see for a step (its "shot",
+   * `step.camera`) is set on purpose with `setShot`, never by looking around.
    */
+  view: StepCamera | null;
+  /** The camera reports where it has come to rest (after a turn by hand, or a flight). */
+  setView: (camera: StepCamera) => void;
+  /** Where the camera should fly next (a chosen view, the step's shot, back from playing). */
   flight: { camera: StepCamera; id: number; save: boolean } | null;
   requestView: (camera: StepCamera) => void;
+  /** Use the working view as what students see for this step (for every step, with one view for all). */
+  setShot: () => void;
+  /** Fly the working view to what students see for this step. */
+  showShot: () => void;
+  /** Forget this step's shot: students get the plain side view. */
+  clearShot: () => void;
   setDisplay: (change: Partial<StepDisplay>) => void;
   toggleTarget: (fencer: FencerId, area: TargetArea) => void;
   /** Change a fencer's height, build, hand or grip (the active fencer unless named). */
@@ -289,6 +298,20 @@ const COALESCE_MS = 1000;
 
 export function currentStep(s: Snapshot): Step {
   return s.combination.steps[s.stepIndex];
+}
+
+/** Has what students see for this step been set? (Without one they get the plain side view.) */
+export function hasShot(step: Step): boolean {
+  return !!step.camera;
+}
+
+/** Is the coach's working view sitting on what students see for the current step? */
+export function viewIsShot(s: Pick<EditorState, 'view' | 'combination' | 'stepIndex'>): boolean {
+  const shot = s.combination.steps[s.stepIndex].camera;
+  if (!shot || !s.view) return false;
+  // A flight lands within a few centimetres, not exactly.
+  const near = (a: readonly number[], b: readonly number[]) => a.every((v, i) => Math.abs(v - b[i]) < 0.05);
+  return near(shot.position, s.view.position) && near(shot.target, s.view.target);
 }
 
 export function activePose(s: EditorState): Pose {
@@ -659,15 +682,33 @@ export const useEditor = create<EditorState>((set, get) => {
     },
     presetPart: 'all',
     setPresetPart: (presetPart) => set({ presetPart }),
-    setStepCamera: (camera) =>
+    view: null,
+    setView: (view) => set({ view }),
+    flight: null,
+    requestView: (camera) => set((s) => ({ flight: { camera, id: (s.flight?.id ?? 0) + 1, save: true } })),
+    setShot: () =>
       set((s) => {
+        const camera = s.view;
+        if (!camera) return {};
         const combination = s.combination.sharedView
           ? withSteps(s.combination, s.combination.steps.map((step) => ({ ...step, camera })))
           : withStep(s, (step) => ({ ...step, camera }));
-        return { combination: { ...combination, updatedAt: new Date().toISOString() } };
+        return edit(s, { combination }, 'shot', s.combination.sharedView ? 'Students’ view, every step' : `Step ${s.stepIndex + 1} · students’ view`);
       }),
-    flight: null,
-    requestView: (camera) => set((s) => ({ flight: { camera, id: (s.flight?.id ?? 0) + 1, save: true } })),
+    showShot: () =>
+      set((s) => {
+        const camera = currentStep(s).camera;
+        return camera ? { flight: { camera, id: (s.flight?.id ?? 0) + 1, save: false } } : {};
+      }),
+    clearShot: () =>
+      set((s) => {
+        if (!s.combination.steps.some((step, i) => step.camera && (s.combination.sharedView || i === s.stepIndex))) return {};
+        const bare = ({ camera: _, ...step }: Step): Step => step;
+        const combination = s.combination.sharedView
+          ? withSteps(s.combination, s.combination.steps.map(bare))
+          : withStep(s, bare);
+        return edit(s, { combination }, undefined, s.combination.sharedView ? 'Students’ view cleared, every step' : `Step ${s.stepIndex + 1} · students’ view cleared`);
+      }),
     setDisplay: (change) =>
       set((s) => edit(s, { combination: withStep(s, (step) => ({ ...step, display: { ...step.display, ...change } })) })),
     toggleTarget: (fencer, area) =>
@@ -899,10 +940,9 @@ async function writeLibraryToFolder() {
   if (!ok && folder?.ready) useEditor.setState({ folder: { ...folder, ready: false } });
 }
 
-// Any change of step (navigating, undo, opening a combination) flies the
-// camera to that step's saved view, if it has one.
+// Playing (or scrubbing) shows each step's shot, as students will see it.
+// When it ends, the camera goes back to the view the coach was working in.
 useEditor.subscribe((s, prev) => {
-  const step = currentStep(s);
-  if (step.id === currentStep(prev).id || !step.camera) return;
-  useEditor.setState({ flight: { camera: step.camera, id: (s.flight?.id ?? 0) + 1, save: false } });
+  if (!prev.preview || s.preview || !s.view) return;
+  useEditor.setState({ flight: { camera: s.view, id: (s.flight?.id ?? 0) + 1, save: false } });
 });
