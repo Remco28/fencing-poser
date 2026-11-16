@@ -1,6 +1,7 @@
 import { OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { WOOD_OF } from '../design.ts';
 import { formatDistance, type Units } from '../model/units.ts';
 import { FENCERS, HEADING, targetParts, type Combination } from '../model/combination.ts';
 import { Mannequin } from '../rig/Mannequin.tsx';
@@ -116,12 +117,13 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
             setup={c.fencers[f]}
             pose={frame.poses[f]}
             heading={HEADING[f]}
+            wood={WOOD_OF[f]}
             targets={(display.targets ?? []).filter((t) => t.fencer === f).flatMap((t) => targetParts(t.area, c.fencers[f]))}
           />
         ))}
         {ghostOf &&
           FENCERS.map((f) => (
-            <Mannequin key={`ghost-${f}-${ghostOf.id}`} ghost setup={c.fencers[f]} pose={ghostOf.poses[f]} heading={HEADING[f]} />
+            <Mannequin key={`ghost-${f}-${ghostOf.id}`} ghost wood={WOOD_OF[f]} setup={c.fencers[f]} pose={ghostOf.poses[f]} heading={HEADING[f]} />
           ))}
         {ghostOf && <PointTrail c={c} from={keys[keyIndex - 1]} to={key} />}
         {m && <ReadoutLines m={m} />}

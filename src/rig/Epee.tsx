@@ -1,8 +1,10 @@
 import type { ThreeEvent } from '@react-three/fiber';
 import { DoubleSide } from 'three';
+import { SCENE } from '../design.ts';
 import { EPEE } from './layout.ts';
 
-const STEEL = '#c9ced6';
+// Darker than polished steel on purpose: the blade has to read against a pale desk, also on a phone.
+const STEEL = SCENE.steel;
 
 interface Props {
   highlight: string | null;
@@ -28,7 +30,7 @@ export function Epee({ highlight, ...events }: Props) {
       {/* grip and pommel, mostly hidden in the fist */}
       <mesh position={[0, g / 2 + 0.01, 0]}>
         <cylinderGeometry args={[0.011, 0.013, Math.abs(g) - 0.01, 12]} />
-        <meshStandardMaterial color="#3a3a3a" roughness={0.8} />
+        <meshStandardMaterial color={SCENE.grip} roughness={0.8} />
       </mesh>
       <mesh position={[0, 0.012, 0]}>
         <sphereGeometry args={[0.014, 12, 10]} />
@@ -47,7 +49,7 @@ export function Epee({ highlight, ...events }: Props) {
       {/* point d'arrêt; a wider invisible sleeve makes the thin blade easier to click */}
       <mesh position={[0, g - blade - 0.008, 0]}>
         <cylinderGeometry args={[0.0055, 0.0055, 0.016, 12]} />
-        <meshStandardMaterial color="#222" roughness={0.6} />
+        <meshStandardMaterial color={SCENE.point} roughness={0.6} />
       </mesh>
       <mesh position={[0, g - blade / 2, 0]} visible={false}>
         <cylinderGeometry args={[0.025, 0.025, blade, 6]} />

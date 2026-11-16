@@ -2,6 +2,8 @@ import { RoundedBox } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import { createContext, use, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Group, Matrix4, Mesh, MeshStandardMaterial } from 'three';
+import { ACCENT, SCENE, TOUCH_RED, WOODS, type Wood as WoodColors, type WoodName } from '../design.ts';
+import { woodGrain } from '../scene/textures.ts';
 import type { JointName } from '../model/joints.ts';
 import type { FencerSetup, Pose } from '../model/types.ts';
 import { Epee } from './Epee.tsx';
@@ -9,11 +11,8 @@ import { FencerTag } from './FencerTag.tsx';
 import { jointPosition, solveRig } from './kinematics.ts';
 import type { Layout } from './layout.ts';
 
-const WOOD = '#d9b68c';
-const WOOD_JOINT = '#b98c5f';
-const SELECTED = '#e0703a';
-const TARGET = '#d23c3c';
-const HOVER = '#ecc9a0';
+/** How a part is shown: plain wood, pointed at, selected, or the target of a hit. */
+type Look = 'wood' | 'hover' | 'selected' | 'target';
 
 interface Props {
   setup: FencerSetup;
@@ -30,9 +29,11 @@ interface Props {
   targets?: JointName[];
   /** A faint, unclickable copy (the previous step, behind this one). */
   ghost?: boolean;
+  /** Which wood the figure is made of: A is maple, B is walnut. */
+  wood?: WoodName;
 }
 
-export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect, label, active = false, onActivate, targets = [], ghost = false }: Props) {
+export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect, label, active = false, onActivate, targets = [], ghost = false, wood = 'maple' }: Props) {
   const rig = useMemo(() => solveRig(setup, pose, heading), [setup, pose, heading]);
   const [hovered, setHovered] = useState<JointName | null>(null);
   const L = rig.layout;
@@ -46,7 +47,7 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect,
       joint={joint}
       ball={(BALLS[joint] ?? 0) * H * (joint.startsWith('wrist') ? 1 : b)}
       matrix={rig.world[joint]}
-      color={joint === selected ? SELECTED : targets.includes(joint) ? TARGET : joint === hovered ? HOVER : WOOD}
+      look={joint === selected ? 'selected' : targets.includes(joint) ? 'target' : joint === hovered ? 'hover' : 'wood'}
       onSelect={onSelect}
       onHover={setHovered}
     >
@@ -89,6 +90,7 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect,
   });
 
   return (
+    <WoodContext value={WOODS[wood]}>
     <group ref={root}>
       {label && !ghost && (
         <FencerTag text={label} active={active} position={[head.x, head.y + 0.17 * H, head.z]} onClick={onActivate} />
@@ -101,7 +103,7 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect,
         <>
           <mesh position={[0, 0.03 * H, 0]} castShadow>
             <cylinderGeometry args={[0.022 * H, 0.025 * H, 0.06 * H, 16]} />
-            <meshStandardMaterial color={WOOD_JOINT} roughness={0.7} />
+            <JointWood />
           </mesh>
           <Ellipsoid position={[0.008 * H, 0.088 * H, 0]} radii={[0.062 * H, 0.074 * H, 0.052 * H]} />
         </>,
@@ -109,7 +111,7 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect,
       {limbs}
       <group matrixAutoUpdate={false} matrix={rig.world.grip}>
         <Epee
-          highlight={selected === 'grip' ? SELECTED : hovered === 'grip' ? HOVER : null}
+          highlight={selected === 'grip' ? ACCENT : hovered === 'grip' ? SCENE.steelHover : null}
           onPointerDown={(e) => {
             if (hitsHandle(e)) return;
             e.stopPropagation();
@@ -124,13 +126,14 @@ export function Mannequin({ setup, pose, heading = 0, selected = null, onSelect,
         />
       </group>
     </group>
+    </WoodContext>
   );
 }
 
 function Part(props: {
   joint: JointName;
   matrix: Matrix4;
-  color: string;
+  look: Look;
   /** Radius of the joint ball at this part's pivot; 0 for none. */
   ball: number;
   children: ReactNode;
@@ -153,15 +156,15 @@ function Part(props: {
       }}
       onPointerOut={() => props.onHover(null)}
     >
-      <ColorContext value={props.color}>
+      <LookContext value={props.look}>
         {props.ball > 0 && (
           <mesh castShadow>
-            <sphereGeometry args={[props.ball, 20, 16]} />
-            <meshStandardMaterial color={props.color === WOOD ? WOOD_JOINT : props.color} roughness={0.6} />
+            <sphereGeometry args={[props.ball, 24, 18]} />
+            <JointWood />
           </mesh>
         )}
         {props.children}
-      </ColorContext>
+      </LookContext>
     </group>
   );
 }
@@ -171,11 +174,32 @@ function hitsHandle(e: ThreeEvent<PointerEvent>): boolean {
   return e.intersections.some((i) => i.object.userData.handle);
 }
 
-// Children of a part take the part's colour unless they set their own material.
-const ColorContext = createContext(WOOD);
+// Children of a part take the figure's wood and the part's look unless they set their own material.
+const WoodContext = createContext<WoodColors>(WOODS.maple);
+const LookContext = createContext<Look>('wood');
 
+const LOOK_COLOR: Record<Exclude<Look, 'wood' | 'hover'>, string> = { selected: ACCENT, target: TOUCH_RED };
+
+/** The body of a part: grained wood, a little brighter when pointed at, one flat colour when selected or hit. */
 function Wood() {
-  return <meshStandardMaterial color={use(ColorContext)} roughness={0.65} />;
+  const wood = use(WoodContext);
+  const look = use(LookContext);
+  if (look === 'selected' || look === 'target') return <meshStandardMaterial color={LOOK_COLOR[look]} roughness={0.65} />;
+  return (
+    <meshStandardMaterial
+      map={woodGrain(wood)}
+      roughness={0.62}
+      emissive={wood.base}
+      emissiveIntensity={look === 'hover' ? 0.35 : 0}
+    />
+  );
+}
+
+/** Joint balls, the neck and the back of the hand: the wood's darker tone. */
+function JointWood() {
+  const wood = use(WoodContext);
+  const look = use(LookContext);
+  return <meshStandardMaterial color={look === 'selected' || look === 'target' ? LOOK_COLOR[look] : wood.joint} roughness={0.58} />;
 }
 
 /**
@@ -197,7 +221,7 @@ function Hand(props: { side: 'r' | 'l'; length: number; width: number; thick: nu
         radius={thick * 0.12}
         position={[0, -length * 0.48, back * thick * 0.42]}
       >
-        <meshStandardMaterial color={WOOD_JOINT} roughness={0.6} />
+        <JointWood />
       </RoundedBox>
       <mesh
         position={[width / 2 + r * 0.4, -length * (props.fist ? 0.55 : 0.4), -back * thick * 0.1]}
@@ -214,7 +238,7 @@ function Hand(props: { side: 'r' | 'l'; length: number; width: number; thick: nu
 function Capsule({ length, radius }: { length: number; radius: number }) {
   return (
     <mesh position={[0, -length / 2, 0]} castShadow>
-      <capsuleGeometry args={[radius, Math.max(length - 2 * radius, 0.001), 8, 20]} />
+      <capsuleGeometry args={[radius, Math.max(length - 2 * radius, 0.001), 10, 28]} />
       <Wood />
     </mesh>
   );
@@ -223,7 +247,7 @@ function Capsule({ length, radius }: { length: number; radius: number }) {
 function Ellipsoid({ position, radii }: { position: [number, number, number]; radii: [number, number, number] }) {
   return (
     <mesh position={position} scale={radii} castShadow>
-      <sphereGeometry args={[1, 32, 24]} />
+      <sphereGeometry args={[1, 40, 28]} />
       <Wood />
     </mesh>
   );

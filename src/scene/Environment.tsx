@@ -1,26 +1,39 @@
-import { Piste } from './Piste.tsx';
+import { SCENE } from '../design.ts';
+import { DeskThings } from './DeskThings.tsx';
+import { BOARD_THICKNESS, Piste } from './Piste.tsx';
+import { deskTop } from './textures.ts';
 
-/** Light, floor and piste: everything in the scene that is not a fencer. */
-export function Environment() {
+/**
+ * Light, desk and piste: everything in the scene that is not a fencer. The
+ * figures stand on a felt-topped board on a pale desk in daylight; the desk
+ * fades into the air, so there is no horizon to distract. `things` adds the
+ * few objects lying about on the desk, for the opening view only.
+ */
+export function Environment({ things = false }: { things?: boolean }) {
   return (
     <>
-      <color attach="background" args={['#eef0f2']} />
-      <hemisphereLight args={['#ffffff', '#b9b4aa', 1.2]} />
+      <color attach="background" args={[SCENE.air]} />
+      <fog attach="fog" args={[SCENE.air, 9, 34]} />
+      <hemisphereLight args={[SCENE.skyLight, SCENE.groundLight, 1.15]} />
       <directionalLight
-        position={[2, 6, 4]}
-        intensity={2}
+        position={[-4, 8, 6]}
+        intensity={2.3}
+        color={SCENE.sun}
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-6}
-        shadow-camera-right={6}
-        shadow-camera-top={4}
-        shadow-camera-bottom={-4}
+        shadow-radius={7}
+        shadow-bias={-0.0003}
+        shadow-camera-left={-8}
+        shadow-camera-right={8}
+        shadow-camera-top={6}
+        shadow-camera-bottom={-6}
       />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[60, 60]} />
-        <meshStandardMaterial color="#dfe2e5" roughness={1} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -BOARD_THICKNESS, 0]} receiveShadow>
+        <planeGeometry args={[120, 120]} />
+        <meshStandardMaterial map={deskTop(SCENE.desk, SCENE.deskGrain)} roughness={0.9} />
       </mesh>
       <Piste />
+      {things && <DeskThings />}
     </>
   );
 }

@@ -1,13 +1,14 @@
 import { Line } from '@react-three/drei';
 import { useEffect, useMemo, useState } from 'react';
 import { CanvasTexture, SRGBColorSpace, Vector3 } from 'three';
+import { FONT_UI, GUIDE_COLORS, PAPER } from '../design.ts';
 import { clampDof, JOINT_BY_NAME, type JointName } from '../model/joints.ts';
 import { angle, type FencerSetup, type Pose } from '../model/types.ts';
 import { jointPosition, solveRig, type Rig } from '../rig/kinematics.ts';
 import { NUDGE_KEYS } from './keyboard.ts';
 
 /** One colour per movement, shared with the rows of the joint controls. */
-export const GUIDE_COLORS = ['#1f9e89', '#5b5bd6', '#d08a00'];
+export { GUIDE_COLORS };
 
 /** How far either side of the current angle a guide is drawn, in degrees. */
 const SPAN = 30;
@@ -104,13 +105,13 @@ function KeyTag({ text, color, position, strong }: { text: string; color: string
     const g = canvas.getContext('2d')!;
     g.beginPath();
     g.arc(size / 2, size / 2, size / 2 - 3, 0, Math.PI * 2);
-    g.fillStyle = '#ffffff';
+    g.fillStyle = PAPER;
     g.fill();
     g.lineWidth = 5;
     g.strokeStyle = color;
     g.stroke();
     g.fillStyle = color;
-    g.font = `bold ${size * 0.5}px system-ui, sans-serif`;
+    g.font = `600 ${size * 0.5}px ${FONT_UI}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(text, size / 2, size / 2 + 2);

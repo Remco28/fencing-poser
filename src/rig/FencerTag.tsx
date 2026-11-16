@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { CanvasTexture, SRGBColorSpace } from 'three';
-
-const ACCENT = '#e0703a';
+import { ACCENT, FONT_UI, INK_SOFT, PAPER } from '../design.ts';
 
 /** A round letter tag drawn to a canvas: no DOM overlay, no font download. */
 export function FencerTag(props: { text: string; active: boolean; position: [number, number, number]; onClick?: () => void }) {
@@ -12,13 +11,13 @@ export function FencerTag(props: { text: string; active: boolean; position: [num
     const g = canvas.getContext('2d')!;
     g.beginPath();
     g.arc(size / 2, size / 2, size / 2 - 4, 0, Math.PI * 2);
-    g.fillStyle = props.active ? ACCENT : '#ffffffdd';
+    g.fillStyle = props.active ? ACCENT : PAPER;
     g.fill();
-    g.lineWidth = 4;
-    g.strokeStyle = props.active ? ACCENT : '#c4c9cf';
+    g.lineWidth = 3;
+    g.strokeStyle = props.active ? ACCENT : INK_SOFT;
     g.stroke();
-    g.fillStyle = props.active ? '#ffffff' : '#646b73';
-    g.font = `bold ${size * 0.55}px system-ui, sans-serif`;
+    g.fillStyle = props.active ? PAPER : INK_SOFT;
+    g.font = `600 ${size * 0.52}px ${FONT_UI}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(props.text, size / 2, size / 2 + 4);

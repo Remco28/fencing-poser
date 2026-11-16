@@ -1,6 +1,7 @@
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CanvasTexture, CatmullRomCurve3, Plane, SRGBColorSpace, TubeGeometry, Vector3 } from 'three';
+import { ACCENT, PAPER } from '../design.ts';
 import { useEditor } from '../editor/store.ts';
 import { FENCERS, type Combination, type FencerId, type Pin } from '../model/combination.ts';
 import { frameAt, pinsOf } from '../viewer/player.ts';
@@ -14,7 +15,7 @@ const NEAR = 0.12;
 /** Pins stay this far from the two steps, which never move. */
 const EDGE = 0.08;
 
-/** A white disc with a red ring and a small grip mark: clearly not the red épée point handle. */
+/** A paper disc with an ink ring and a small grip mark: clearly not a drag handle of the body. */
 function useRingTexture() {
   const texture = useMemo(() => {
     const size = 96;
@@ -22,12 +23,12 @@ function useRingTexture() {
     const g = canvas.getContext('2d')!;
     g.beginPath();
     g.arc(size / 2, size / 2, size / 2 - 6, 0, Math.PI * 2);
-    g.fillStyle = '#ffffff';
+    g.fillStyle = PAPER;
     g.fill();
     g.lineWidth = 9;
-    g.strokeStyle = '#d0263a';
+    g.strokeStyle = ACCENT;
     g.stroke();
-    g.fillStyle = '#d0263a';
+    g.fillStyle = ACCENT;
     for (const dx of [-14, 0, 14]) {
       g.beginPath();
       g.arc(size / 2 + dx, size / 2, 5, 0, Math.PI * 2);

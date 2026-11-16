@@ -1,19 +1,20 @@
 import { Line } from '@react-three/drei';
 import { useEffect, useMemo } from 'react';
 import { CanvasTexture, SRGBColorSpace } from 'three';
+import { FONT_UI, PAPER, WARN } from '../design.ts';
 import type { Balance } from '../rig/balance.ts';
 
-const RED = '#d0263a';
+const RED = WARN;
 
 /**
- * Shown only when a fencer is off balance: a red ring on the floor under the
+ * Shown only when a fencer is off balance: an amber ring on the floor under the
  * centre of mass, a line down to it, and a small "off balance" tag.
  */
 export function BalanceMark({ balance }: { balance: Balance }) {
   const texture = useMemo(() => {
     const canvas = Object.assign(document.createElement('canvas'), { width: 256, height: 64 });
     const g = canvas.getContext('2d')!;
-    g.fillStyle = '#ffffffe6';
+    g.fillStyle = PAPER;
     g.beginPath();
     g.roundRect(2, 2, 252, 60, 30);
     g.fill();
@@ -21,7 +22,7 @@ export function BalanceMark({ balance }: { balance: Balance }) {
     g.lineWidth = 4;
     g.stroke();
     g.fillStyle = RED;
-    g.font = '600 30px system-ui, sans-serif';
+    g.font = `600 30px ${FONT_UI}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText('off balance', 128, 34);

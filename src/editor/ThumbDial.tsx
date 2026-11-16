@@ -1,6 +1,7 @@
 import { Line } from '@react-three/drei';
 import { useMemo } from 'react';
 import { Vector3 } from 'three';
+import { ACCENT, INK } from '../design.ts';
 import type { Rig } from '../rig/kinematics.ts';
 import { jointAxis, jointPosition } from '../rig/kinematics.ts';
 
@@ -37,12 +38,12 @@ export function ThumbDial({ rig, side, weapon }: { rig: Rig; side: 'r' | 'l'; we
   const faint = { transparent: true, depthTest: false, renderOrder: 9 } as const;
   return (
     <group>
-      <Line points={ring} color="#3c4248" lineWidth={1.2} opacity={0.5} {...faint} />
+      <Line points={ring} color={INK} lineWidth={1.2} opacity={0.5} {...faint} />
       {ticks.map((t, i) => (
-        <Line key={i} points={t} color="#3c4248" lineWidth={i % 3 === 0 ? 1.6 : 1} opacity={0.5} {...faint} />
+        <Line key={i} points={t} color={INK} lineWidth={i % 3 === 0 ? 1.6 : 1} opacity={0.5} {...faint} />
       ))}
-      <Line points={twelve} color="#3c4248" lineWidth={2} opacity={0.7} {...faint} />
-      <Line points={thumb} color="#e0703a" lineWidth={3} opacity={0.95} {...faint} />
+      <Line points={twelve} color={INK} lineWidth={2} opacity={0.7} {...faint} />
+      <Line points={thumb} color={ACCENT} lineWidth={3} opacity={0.95} {...faint} />
     </group>
   );
 }

@@ -2,6 +2,7 @@ import { OrbitControls } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import { Vector3 } from 'three';
+import { WOOD_OF } from '../design.ts';
 import { Handles } from '../ik/Handles.tsx';
 import { FENCERS, HEADING, isShaped, targetParts } from '../model/combination.ts';
 import { Mannequin } from '../rig/Mannequin.tsx';
@@ -134,6 +135,7 @@ export function Stage() {
             setup={s.combination.fencers[f]}
             pose={step.poses[f]}
             heading={HEADING[f]}
+            wood={WOOD_OF[f]}
             selected={s.active === f ? s.selected : null}
             targets={(display.targets ?? [])
               .filter((t) => t.fencer === f)
@@ -148,6 +150,7 @@ export function Stage() {
             <Mannequin
               key={`ghost-${f}-${previous.id}`}
               ghost
+              wood={WOOD_OF[f]}
               setup={s.combination.fencers[f]}
               pose={previous.poses[f]}
               heading={HEADING[f]}

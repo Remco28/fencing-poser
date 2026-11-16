@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FENCERS, HEADING, targetParts, type Combination, type StepCamera } from '../model/combination.ts';
 import { formatDistance, type Units } from '../model/units.ts';
+import { WOOD_OF } from '../design.ts';
 import { Mannequin } from '../rig/Mannequin.tsx';
 import { Environment } from '../scene/Environment.tsx';
 import { measure, viewFor } from '../scene/measure.ts';
@@ -45,6 +46,7 @@ function ExportScene({ c, pos }: { c: Combination; pos: number }) {
           setup={c.fencers[f]}
           pose={frame.poses[f]}
           heading={HEADING[f]}
+          wood={WOOD_OF[f]}
           targets={(display.targets ?? []).filter((t) => t.fencer === f).flatMap((t) => targetParts(t.area, c.fencers[f]))}
         />
       ))}

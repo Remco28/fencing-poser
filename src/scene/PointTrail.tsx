@@ -1,6 +1,7 @@
 import { Line } from '@react-three/drei';
 import { useMemo } from 'react';
 import type { Vector3 } from 'three';
+import { ACCENT } from '../design.ts';
 import { FENCERS, HEADING, type Combination } from '../model/combination.ts';
 import { solveRig } from '../rig/kinematics.ts';
 import { frameAt } from '../viewer/player.ts';
@@ -35,7 +36,7 @@ export function PointTrail({ c, from, to, onClick }: { c: Combination; from: num
             <group key={f}>
               <Line
                 points={points}
-                color="#d0263a"
+                color={ACCENT}
                 lineWidth={onClick ? 3 : 2}
                 transparent
                 opacity={0.75}
@@ -51,7 +52,7 @@ export function PointTrail({ c, from, to, onClick }: { c: Combination; from: num
               />
               <mesh position={points[0]}>
                 <sphereGeometry args={[0.01, 10, 8]} />
-                <meshBasicMaterial color="#d0263a" transparent opacity={0.5} />
+                <meshBasicMaterial color={ACCENT} transparent opacity={0.5} />
               </mesh>
             </group>
           ),

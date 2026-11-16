@@ -2,22 +2,24 @@ import { Billboard } from '@react-three/drei';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef, useState } from 'react';
 import { Plane, Vector3 } from 'three';
+import { ACCENT, PAPER } from '../design.ts';
 import { useEditor } from '../editor/store.ts';
 import type { FencerSetup, Pose } from '../model/types.ts';
 import { solveRig } from '../rig/kinematics.ts';
 import { dragDot, keptDots } from './drag.ts';
 import { handlePositions, type Handle } from './ik.ts';
 
+/** Every handle is drawn the same way: where it sits says what it is. */
 export const HANDLE_COLOR: Record<Handle, string> = {
-  hand_r: '#e0703a',
-  hand_l: '#e0703a',
-  foot_r: '#3a7be0',
-  foot_l: '#3a7be0',
-  hips: '#7a3ae0',
-  point: '#d0263a',
+  hand_r: ACCENT,
+  hand_l: ACCENT,
+  foot_r: ACCENT,
+  foot_l: ACCENT,
+  hips: ACCENT,
+  point: ACCENT,
 };
 
-const RADIUS: Record<Handle, number> = { hand_r: 0.035, hand_l: 0.035, foot_r: 0.04, foot_l: 0.04, hips: 0.05, point: 0.03 };
+const RADIUS: Record<Handle, number> = { hand_r: 0.04, hand_l: 0.04, foot_r: 0.042, foot_l: 0.042, hips: 0.048, point: 0.032 };
 
 export const HANDLE_NAMES: Record<Handle, string> = {
   hand_r: 'right hand',
@@ -79,15 +81,24 @@ export function Handles({ setup, pose, heading }: { setup: FencerSetup; pose: Po
     <>
       {(Object.keys(positions) as Handle[]).map((h) => (
         <group key={h}>
-          {kept.includes(h) && (
-            // Held in place: a ring round the handle, always facing the camera.
-            <Billboard position={positions[h]} renderOrder={10}>
-              <mesh renderOrder={10} raycast={() => null}>
-                <ringGeometry args={[RADIUS[h] * 1.55, RADIUS[h] * 1.95, 32]} />
-                <meshBasicMaterial color={HANDLE_COLOR[h]} transparent opacity={0.9} depthTest={false} />
+          {/* A paper dot with an ink ring, always facing the camera; filled with ink while it is kept in place. */}
+          <Billboard position={positions[h]}>
+            <mesh renderOrder={10} raycast={() => null} scale={hover === h ? 1.25 : 1}>
+              <circleGeometry args={[RADIUS[h], 32]} />
+              <meshBasicMaterial color={kept.includes(h) ? ACCENT : PAPER} transparent opacity={0.96} depthTest={false} />
+            </mesh>
+            <mesh renderOrder={11} raycast={() => null} scale={hover === h ? 1.25 : 1}>
+              <ringGeometry args={[RADIUS[h] * 0.7, RADIUS[h], 32]} />
+              <meshBasicMaterial color={ACCENT} transparent depthTest={false} />
+            </mesh>
+            {kept.includes(h) && (
+              <mesh renderOrder={12} raycast={() => null}>
+                <circleGeometry args={[RADIUS[h] * 0.28, 20]} />
+                <meshBasicMaterial color={PAPER} transparent depthTest={false} />
               </mesh>
-            </Billboard>
-          )}
+            )}
+          </Billboard>
+          {/* What is grabbed: an unseen ball a little larger than the dot. */}
           <mesh
             position={positions[h]}
             renderOrder={10}
@@ -106,8 +117,8 @@ export function Handles({ setup, pose, heading }: { setup: FencerSetup; pose: Po
               document.body.style.cursor = '';
             }}
           >
-            <sphereGeometry args={[RADIUS[h] * (hover === h ? 1.3 : 1), 20, 16]} />
-            <meshBasicMaterial color={HANDLE_COLOR[h]} transparent opacity={hover === h ? 0.95 : 0.75} depthTest={false} />
+            <sphereGeometry args={[RADIUS[h] * 1.3, 16, 12]} />
+            <meshBasicMaterial transparent opacity={0} depthTest={false} depthWrite={false} />
           </mesh>
         </group>
       ))}
