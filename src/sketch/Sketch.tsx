@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEven
 import { Vector3 } from 'three';
 import { INK_SOFT } from '../design.ts';
 import { HANDLE_COLOR, nextDragId } from '../ik/Handles.tsx';
-import { DOT_JOINT, DOTS, dotPositions, dragDot, headCentre, keptDots, slideFencer, type Dot } from '../ik/drag.ts';
+import { DOT_JOINT, DOTS, dotPositions, dragDotKept, headCentre, keptDots, keptInDrag, keptInSlide, slideFencer, type Dot, type Spots } from '../ik/drag.ts';
 import { FENCERS, HEADING, type FencerId } from '../model/combination.ts';
 import type { FencerSetup, Pose } from '../model/types.ts';
 import { formatDistance } from '../model/units.ts';
@@ -166,8 +166,9 @@ function camFor(box: Box, w: number, h: number): Cam {
 }
 
 type Drag =
-  | { kind: 'dot'; f: FencerId; dot: Dot; start: Vector3; from: Pose; id: number; x0: number; y0: number; moved: boolean }
-  | { kind: 'floor'; f: FencerId; from: Pose; id: number; x0: number; y0: number; moved: boolean }
+  // `from` is the fencer's pose at pointer-down, `stepId` the step, `spots` where their kept things belong.
+  | { kind: 'dot'; f: FencerId; dot: Dot; start: Vector3; from: Pose; stepId: string; spots: Spots; id: number; x0: number; y0: number; moved: boolean }
+  | { kind: 'floor'; f: FencerId; from: Pose; stepId: string; spots: Spots; id: number; x0: number; y0: number; moved: boolean }
   | { kind: 'pan'; cam: Cam; x0: number; y0: number };
 
 export function Sketch() {
@@ -309,14 +310,17 @@ export function Sketch() {
     if (!editable || e.button !== 0) return;
     posing(f);
     const { x, y } = local(e);
-    begin({ kind: 'dot', f, dot, start: dots[f][dot].clone(), from: poses[f], id: nextDragId(), x0: x, y0: y, moved: false }, e);
+    const st = useEditor.getState();
+    const spots = st.spotsFor(f, keptInDrag(st.combination.fencers[f], st.keep, dot));
+    begin({ kind: 'dot', f, dot, start: dots[f][dot].clone(), from: poses[f], stepId: currentStep(st).id, spots, id: nextDragId(), x0: x, y0: y, moved: false }, e);
   };
 
   const onFloorDown = (f: FencerId) => (e: ReactPointerEvent) => {
     if (!editable || e.button !== 0) return;
     posing(f);
     const { x, y } = local(e);
-    begin({ kind: 'floor', f, from: poses[f], id: nextDragId(), x0: x, y0: y, moved: false }, e);
+    const st = useEditor.getState();
+    begin({ kind: 'floor', f, from: poses[f], stepId: currentStep(st).id, spots: st.spotsFor(f, keptInSlide(st.keep)), id: nextDragId(), x0: x, y0: y, moved: false }, e);
   };
 
   const onBackgroundDown = (e: ReactPointerEvent) => {
@@ -342,7 +346,8 @@ export function Sketch() {
       const target = toWorld(view, facing, (x - c.tx) / c.k, (c.ty - y) / c.k, d.start);
       // Always worked out from the pose the drag began with, so where the dot
       // is decides the pose, not the route the pointer took to get there.
-      st.dragPose(dragDot(d.from, st.combination.fencers[d.f], HEADING[d.f], d.dot, target, st.keep), d.id);
+      const r = dragDotKept(d.from, st.combination.fencers[d.f], HEADING[d.f], d.dot, target, st.keep, d.spots);
+      st.dragPose(r.pose, d.id, { fencer: d.f, stepId: d.stepId, pose: d.from, spots: d.spots, cut: r.cut });
     } else {
       // Along the piste; from above, across it too.
       // Worked out from the pose the drag began with, like a dot. The feet
@@ -350,7 +355,8 @@ export function Sketch() {
       const from = d.from.root;
       const rx = Math.max(-PISTE_HALF, Math.min(PISTE_HALF, from.x + (x - d.x0) / c.k));
       const rz = view === 'above' ? Math.max(-PISTE.width / 2, Math.min(PISTE.width / 2, from.z + (y - d.y0) / c.k)) : from.z;
-      st.dragPose(slideFencer(d.from, st.combination.fencers[d.f], HEADING[d.f], rx, rz, st.keep).pose, d.id);
+      const r = slideFencer(d.from, st.combination.fencers[d.f], HEADING[d.f], rx, rz, st.keep, d.spots);
+      st.dragPose(r.pose, d.id, { fencer: d.f, stepId: d.stepId, pose: d.from, spots: d.spots, cut: r.cut });
     }
   };
 

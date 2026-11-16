@@ -125,12 +125,22 @@ interface Start {
   build: Build;
   rig: Rig;
   pelvis: Vector3;
+  /** Where kept things belong, when that is not simply where they are on `pose` (see `Spots`). */
+  places?: Partial<Places>;
 }
 
-function begin(pose: Pose, setup: FencerSetup, heading: number, keep: Keep): Start {
+function begin(pose: Pose, setup: FencerSetup, heading: number, keep: Keep, places?: Partial<Places>): Start {
   const build: Build = (p) => solveRig(setup, p, heading);
   const rig = build(pose);
-  return { pose, setup, heading, keep, w: weaponSide(setup), build, rig, pelvis: jointPosition(rig, 'pelvis') };
+  return { pose, setup, heading, keep, w: weaponSide(setup), build, rig, pelvis: jointPosition(rig, 'pelvis'), places };
+}
+
+/** The feet to hold on these sides: as they are now, but standing where their reference places say. */
+function holdsOf(st: Start, sides: readonly Side[] = ['r', 'l']): FootHold[] {
+  return footHolds(st.rig, sides).map((h) => {
+    const place = st.places?.[`foot_${h.side}`];
+    return place ? { ...h, at: place.at } : h;
+  });
 }
 
 /** `aim`, except that a target on the wrist itself leaves the hand alone. */
@@ -321,7 +331,7 @@ function limbTo(st: Start, limb: Limb, side: Side, target: Vector3, facing: Quat
   const L = r.layout;
   const root = jointPosition(r, limb === 'arm' ? `shoulder_${side}` : `hip_${side}`);
   const len = limb === 'arm' ? L.upperArm + L.forearm - ARM_SLACK : L.thigh + L.shank - LEG_SLACK;
-  const holds = st.keep.feet ? footHolds(r, limb === 'leg' ? [otherSide(side)] : ['r', 'l']) : [];
+  const holds = st.keep.feet ? holdsOf(st, limb === 'leg' ? [otherSide(side)] : ['r', 'l']) : [];
   const y0 = st.pelvis.y;
   const f = followBody({ from: root, target, R: len }, plantedChains(st, holds), y0, Math.min(y0, LOWEST_PELVIS * L.height));
   const bend = bendOf(r, limb, side);
@@ -469,6 +479,32 @@ export function placesOf(pose: Pose, setup: FencerSetup, heading: number): Place
   return placesOfRig(solveRig(setup, pose, heading), weaponSide(setup));
 }
 
+/**
+ * Where kept things belong, remembered from one edit to the next: positions
+ * only. Which way a foot or the hand faces, and which way a knee points, are
+ * always taken from the pose as it is, so turning the hand by dragging the
+ * point, or a knee by its dot, is never undone by a later edit.
+ */
+export type Spots = Partial<Record<Kept, Vector3>>;
+
+/** The positions of these places. */
+export function spotsOf(places: Partial<Places>): Spots {
+  const out: Spots = {};
+  for (const k of Object.keys(places) as Kept[]) out[k] = k === 'point' ? places.point!.tip : (places[k] as FootHold | HandPlace).at;
+  return out;
+}
+
+/** The `kept` things as they are in `now`, each standing at its remembered spot if there is one. */
+export function withSpots(now: Places, kept: readonly Kept[], spots: Spots = {}): Partial<Places> {
+  const out: Partial<Places> = {};
+  for (const k of kept) {
+    const at = spots[k];
+    if (k === 'point') out.point = at ? { ...now.point, tip: at } : now.point;
+    else Object.assign(out, { [k]: at ? { ...now[k], at } : now[k] });
+  }
+  return out;
+}
+
 /** Only the named places. */
 export function pick(places: Partial<Places>, kept: readonly Kept[]): Partial<Places> {
   const out: Partial<Places> = {};
@@ -566,11 +602,12 @@ function holdWeaponAt(st: Start, pose: Pose, places: Partial<Places>): Pose {
   return settlePoint(st, pose, tip, at, facing);
 }
 
-/** A kept weapon hand or point goes back where it was when the drag began. */
+/** A kept weapon hand or point goes back to its reference place (by default where it was when the drag began). */
 function holdWeapon(st: Start, pose: Pose): Pose {
   const { keep } = st;
   if (!keep.hand && !keep.point) return pose;
-  return holdWeaponAt(st, pose, pick(placesOfRig(st.rig, st.w), [...(keep.hand ? (['hand'] as Kept[]) : []), ...(keep.point ? (['point'] as Kept[]) : [])]));
+  const kept: Kept[] = [...(keep.hand ? (['hand'] as Kept[]) : []), ...(keep.point ? (['point'] as Kept[]) : [])];
+  return holdWeaponAt(st, pose, { ...pick(placesOfRig(st.rig, st.w), kept), ...pick(st.places ?? {}, kept) });
 }
 
 /**
@@ -637,7 +674,7 @@ function pointTo(st: Start, target: Vector3): Pose {
 /** Move the hips to `target`. Planted feet stay; the hips stop where the legs can no longer reach. */
 function hipsTo(st: Start, target: Vector3): Pose {
   if (!st.keep.feet) return { ...st.pose, root: { ...st.pose.root, x: target.x, z: target.z } };
-  const holds = footHolds(st.rig);
+  const holds = holdsOf(st);
   const chains = plantedChains(st, holds);
   const minY = Math.min(st.pelvis.y, LOWEST_PELVIS * st.rig.layout.height);
   // Highest the pelvis can be over (x, z), or -Infinity if a leg cannot reach that far.
@@ -779,7 +816,7 @@ function dragRaw(st: Start, dot: Dot, target: Vector3): Pose {
       const p = limbTo(st, 'arm', side, target, worldQ(st.rig.world[`wrist_${side}`]));
       if (side !== st.w) return holdWeapon(st, p);
       // The weapon hand moves; a kept point stays by the wrist turning.
-      return keep.point ? safeAim(p, st.build, setup, st.rig.tip) : p;
+      return keep.point ? safeAim(p, st.build, setup, st.places?.point?.tip ?? st.rig.tip) : p;
     }
     case 'foot_r':
     case 'foot_l': {
@@ -804,25 +841,48 @@ function dragRaw(st: Start, dot: Dot, target: Vector3): Pose {
   }
 }
 
+/** What a drag of `dot` keeps: everything switched on except the dot itself. A knee keeps both feet, its own included. */
+export function keptInDrag(setup: FencerSetup, keep: Keep, dot: Dot): Kept[] {
+  const hand: Dot = `hand_${weaponSide(setup)}`;
+  return [
+    ...(keep.feet ? (['foot_r', 'foot_l'] as const).filter((f) => f !== dot) : []),
+    ...(keep.hand && dot !== hand ? (['hand'] as Kept[]) : []),
+    ...(keep.point && dot !== 'point' ? (['point'] as Kept[]) : []),
+  ];
+}
+
 /**
- * Drag a dot to `target` (world space); returns the new pose. Whatever `keep`
- * names stays where it was, unless it is the dot being dragged. `pose` is the
- * pose the drag began with: a kept hand or point that the body would pull
- * out of reach stops the dot short of the pointer instead of moving. (Kept
- * feet stop the body the same way, inside each dot's own move.)
+ * Drag a dot to `target` (world space). `pose` is the pose the drag began
+ * with. Whatever `keep` names stays where it belongs, unless it is the dot
+ * being dragged: `spots` says where that is (remembered from earlier edits;
+ * by default where each thing is on `pose`). If the drag would pull a kept
+ * thing out of reach, the dot stops short of the pointer and `cut` says so.
  */
-export function dragDot(pose: Pose, setup: FencerSetup, heading: number, dot: Dot, target: Vector3, keep: Keep = DEFAULT_KEEP): Pose {
-  if (![target.x, target.y, target.z].every(Number.isFinite)) return pose;
-  const st = begin(pose, setup, heading, keep);
+export function dragDotKept(
+  pose: Pose,
+  setup: FencerSetup,
+  heading: number,
+  dot: Dot,
+  target: Vector3,
+  keep: Keep = DEFAULT_KEEP,
+  spots?: Spots,
+): { pose: Pose; cut: boolean } {
+  if (![target.x, target.y, target.z].every(Number.isFinite)) return { pose, cut: false };
+  const rig = solveRig(setup, pose, heading);
+  const places = withSpots(placesOfRig(rig, weaponSide(setup)), keptInDrag(setup, keep, dot), spots);
+  const st = begin(pose, setup, heading, keep, places);
   const solve = (t: Vector3) => {
     const p = dragRaw(st, dot, t);
     return finite(p) ? p : pose;
   };
-  const hand: Dot = `hand_${st.w}`;
-  const kept: Kept[] = [...(keep.hand && dot !== hand ? (['hand'] as Kept[]) : []), ...(keep.point && dot !== 'point' ? (['point'] as Kept[]) : [])];
-  if (!kept.length) return solve(target);
+  if (!Object.keys(places).length) return { pose: solve(target), cut: false };
   const start = dotPositions(st.rig)[dot];
-  return holdKept(pick(placesOfRig(st.rig, st.w), kept), pose, (k) => solve(k >= 1 ? target : start.clone().lerp(target, k)), setup, heading, 6).pose;
+  return holdKept(places, pose, (k) => solve(k >= 1 ? target : start.clone().lerp(target, k)), setup, heading);
+}
+
+/** `dragDotKept`, the pose only. */
+export function dragDot(pose: Pose, setup: FencerSetup, heading: number, dot: Dot, target: Vector3, keep: Keep = DEFAULT_KEEP, spots?: Spots): Pose {
+  return dragDotKept(pose, setup, heading, dot, target, keep, spots).pose;
 }
 
 /** Which things `keep` holds through an edit of the `edited` joints: never a limb the coach is editing directly. */
@@ -919,9 +979,9 @@ export function keepInPlace(before: Pose, after: Pose, setup: FencerSetup, headi
 
 /**
  * Slide the whole fencer along (and across) the piste. The feet travel with
- * the fencer, as a step must; a kept weapon hand or point stays in `places`
- * (by default where it is on `pose`), the arm re-solving, and the slide stops
- * short if the arm cannot manage it.
+ * the fencer, as a step must; a kept weapon hand or point stays at its spot
+ * (remembered, or by default where it is on `pose`), the arm re-solving, and
+ * the slide stops short if the arm cannot manage it.
  */
 export function slideFencer(
   pose: Pose,
@@ -930,10 +990,15 @@ export function slideFencer(
   x: number,
   z: number,
   keep: Keep,
-  places?: Partial<Places>,
+  spots?: Spots,
 ): { pose: Pose; cut: boolean } {
   const to: Pose = { ...pose, root: { ...pose.root, x, z } };
-  const kept: Kept[] = [...(keep.hand ? (['hand'] as Kept[]) : []), ...(keep.point ? (['point'] as Kept[]) : [])];
+  const kept = keptInSlide(keep);
   if (!kept.length) return { pose: to, cut: false };
-  return editKept(pick(places ?? placesOf(pose, setup, heading), kept), pose, to, setup, heading);
+  return editKept(withSpots(placesOf(pose, setup, heading), kept, spots), pose, to, setup, heading);
+}
+
+/** What a slide of the whole fencer keeps: the hand and the point, never the feet. */
+export function keptInSlide(keep: Keep): Kept[] {
+  return [...(keep.hand ? (['hand'] as Kept[]) : []), ...(keep.point ? (['point'] as Kept[]) : [])];
 }

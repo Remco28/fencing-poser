@@ -3,10 +3,11 @@ import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef, useState } from 'react';
 import { Plane, Vector3, type Group, type PerspectiveCamera } from 'three';
 import { ACCENT, PAPER } from '../design.ts';
-import { useEditor } from '../editor/store.ts';
+import { currentStep, useEditor } from '../editor/store.ts';
+import type { FencerId } from '../model/combination.ts';
 import type { FencerSetup, Pose } from '../model/types.ts';
 import { solveRig } from '../rig/kinematics.ts';
-import { dragDot, keptDots } from './drag.ts';
+import { dragDotKept, keptDots, keptInDrag, type Spots } from './drag.ts';
 import { handlePositions, type Handle } from './ik.ts';
 
 /** Every handle is drawn the same way: where it sits says what it is. */
@@ -49,7 +50,8 @@ export function Handles({ setup, pose, heading }: { setup: FencerSetup; pose: Po
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null;
   const positions = useMemo(() => handlePositions(solveRig(setup, pose, heading)), [setup, pose, heading]);
-  const drag = useRef<{ handle: Handle; plane: Plane; id: number; from: Pose } | null>(null);
+  // `from` is the pose at pointer-down, on `fencer` in step `stepId`; `spots` is where their kept things belong.
+  const drag = useRef<{ handle: Handle; plane: Plane; id: number; from: Pose; fencer: FencerId; stepId: string; spots: Spots } | null>(null);
   const [hover, setHover] = useState<Handle | null>(null);
   const keep = useEditor((s) => s.keep);
   const kept = keptDots(setup, keep);
@@ -71,7 +73,16 @@ export function Handles({ setup, pose, heading }: { setup: FencerSetup; pose: Po
     e.stopPropagation();
     (e.target as unknown as Element).setPointerCapture(e.pointerId);
     const normal = camera.getWorldDirection(new Vector3());
-    drag.current = { handle, plane: new Plane().setFromNormalAndCoplanarPoint(normal, positions[handle]), id: nextDragId(), from: pose };
+    const s = useEditor.getState();
+    drag.current = {
+      handle,
+      plane: new Plane().setFromNormalAndCoplanarPoint(normal, positions[handle]),
+      id: nextDragId(),
+      from: pose,
+      fencer: s.active,
+      stepId: currentStep(s).id,
+      spots: s.spotsFor(s.active, keptInDrag(setup, s.keep, handle)),
+    };
     if (controls) controls.enabled = false;
   };
 
@@ -83,7 +94,10 @@ export function Handles({ setup, pose, heading }: { setup: FencerSetup; pose: Po
     if (!target) return;
     const s = useEditor.getState();
     // From the pose the drag began with: where the handle is decides the pose, not the route taken.
-    s.dragPose(dragDot(d.from, setup, heading, d.handle, target, s.keep), d.id);
+    // The store ignores the move if another fencer or step is being posed now, or something else has edited this fencer since.
+    if (s.active !== d.fencer) return;
+    const r = dragDotKept(d.from, setup, heading, d.handle, target, s.keep, d.spots);
+    s.dragPose(r.pose, d.id, { fencer: d.fencer, stepId: d.stepId, pose: d.from, spots: d.spots, cut: r.cut });
   };
 
   const end = (e: ThreeEvent<PointerEvent>) => {

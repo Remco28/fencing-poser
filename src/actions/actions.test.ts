@@ -399,3 +399,74 @@ describe('review round 1: footwork is measured from the back foot', () => {
     expect(Math.hypot(now.x - was.x, now.z - was.z)).toBeLessThan(0.01);
   });
 });
+
+describe('review round 2: where a move ends, and hits that keep their feet', () => {
+  const ankles = (c: Combination, p: Poses, f: FencerId) => (['ankle_r', 'ankle_l'] as const).map((a) => jointPosition(rig(c, p, f), a));
+  const feetMoved = (c: Combination, a: Poses, b: Poses, f: FencerId) => Math.max(...ankles(c, a, f).map((p, i) => p.distanceTo(ankles(c, b, f)[i])));
+  const gap = (c: Combination, p: Poses, f: FencerId) => -toeAlong(c, p, other(f)) - toeAlong(c, p, f);
+  /** `f` in a preset pose with their hips `x` from the centre line, the other en garde the same distance the other side. */
+  const posed = (c: Combination, f: FencerId, id: string, x: number): Poses => {
+    const p = apart(c, x);
+    const preset = BUILT_IN_PRESETS.find((q) => q.id === id)!;
+    return { ...p, [f]: { ...poseFromPreset(preset, c.fencers[f].handedness, p[f]), root: p[f].root } };
+  };
+
+  it.each(variants)('refuses a Recover that would end past the opponent’s toe (R2-3) (%s)', (_, c, f) => {
+    const p = posed(c, f, 'fleche', 0.7);
+    expect(gap(c, p, f)).toBeGreaterThan(0.1);
+    const r = act(c, p, f, { kind: 'footwork', move: 'recover' });
+    if (r.cramped === 'blocked') expect(r.poses).toBe(p);
+    else expect(gap(c, r.poses, f)).toBeGreaterThanOrEqual(-1e-6);
+    // With room, Recover still recovers.
+    const far = posed(c, f, 'fleche', 1.5);
+    expect(act(c, far, f, { kind: 'footwork', move: 'recover' }).cramped).toBeUndefined();
+  });
+
+  it.each(variants)('allows a move that ENDS behind the toe, even from toes already overlapping (%s)', (_, c, f) => {
+    const p = posed(c, f, 'lunge', 0.5);
+    expect(gap(c, p, f)).toBeLessThan(-0.1);
+    const half = act(c, p, f, { kind: 'footwork', move: 'half-lunge' });
+    if (half.cramped !== 'blocked') expect(gap(c, half.poses, f)).toBeGreaterThanOrEqual(-1e-6);
+    // Retreat always gets out.
+    const back = act(c, p, f, { kind: 'footwork', move: 'retreat' });
+    expect(back.cramped).not.toBe('blocked');
+    expect(gap(c, back.poses, f)).toBeGreaterThan(gap(c, p, f));
+  });
+
+  it.each(variants)('never moves the feet a hit with the arm stands on, landed or not (W1) (%s)', (_, c, f) => {
+    for (const measure of ['short', 'medium'] as const) {
+      const p = act(c, apart(c, 1.1), f, { kind: 'distance', measure }).poses;
+      for (const area of ['mask', 'body', 'arm', 'hand', 'leg', 'foot'] as const) {
+        const r = act(c, p, f, { kind: 'hit', area, with: 'arm' });
+        expect(feetMoved(c, p, r.poses, f), `${measure} ${area}`).toBeLessThan(0.015);
+      }
+    }
+    // And it still lands where the arm reaches.
+    const near = act(c, apart(c, 1.1), f, { kind: 'distance', measure: 'short' }).poses;
+    expect(act(c, near, f, { kind: 'hit', area: 'body', with: 'arm' }).short).toBe(0);
+  });
+
+  it.each(variants)('keeps both feet under a hit with a lunge (%s)', (_, c, f) => {
+    const p = act(c, apart(c, 1.1), f, { kind: 'distance', measure: 'medium' }).poses;
+    for (const area of ['mask', 'body', 'leg'] as const) {
+      const r = act(c, p, f, { kind: 'hit', area, with: 'lunge' });
+      const back = `ankle_${rear(c, f)}` as const;
+      expect(jointPosition(rig(c, r.poses, f), back).distanceTo(jointPosition(rig(c, p, f), back)), area).toBeLessThan(0.015);
+      // Neither foot is left hanging in the air by the lean.
+      for (const a of ankles(c, r.poses, f)) expect(a.y, area).toBeLessThan(0.12);
+    }
+  });
+
+  it.each(variants)('never runs a flèche hit backward or past the toe; from too close it is the arm alone, and says so (W2) (%s)', (_, c, f) => {
+    for (const x of [0.5, 0.55, 0.6, 0.8, 1.2, 2.55]) {
+      const p = apart(c, x);
+      const r = act(c, p, f, { kind: 'hit', area: 'body', with: 'fleche' });
+      expect((r.poses[f].root.x - p[f].root.x) * FORWARD[f], `hips ${2 * x} m apart`).toBeGreaterThanOrEqual(-1e-6);
+      expect(gap(c, r.poses, f), `hips ${2 * x} m apart`).toBeGreaterThanOrEqual(Math.min(0, gap(c, p, f)) - 1e-6);
+      if (gap(c, p, f) < 0.3) expect(['short', undefined]).toContain(r.cramped);
+    }
+    const jammed = act(c, apart(c, 0.5), f, { kind: 'hit', area: 'body', with: 'fleche' });
+    expect(jammed.cramped).toBe('short');
+    expect(feetMoved(c, apart(c, 0.5), jammed.poses, f)).toBeLessThan(0.015);
+  });
+});

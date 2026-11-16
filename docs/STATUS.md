@@ -45,7 +45,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Export**: captioned picture, PDF handout (two steps per page), video of smooth playback, combination file. `src/export/`
 
 ### Quality
-- 289 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, dragging, actions, blades, playback, links, merging, store); run `npm test`.
+- 317 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, dragging, actions, blades, playback, links, merging, store); run `npm test`.
 - Visual checks are done in a headless browser through a dev-only `window.__editor` hook.
 
 ## Testing with people
@@ -83,6 +83,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - A low parry (2, 7, 8) chosen against a high attack does not find the blade, and a parry in a lunge is low because the whole body is.
 - A hit asked for from too close cannot land (the blade is longer than the gap); the app says so rather than stepping the fencer back.
 - A known old bug is filed in `BUGS.md`: clicking a pose the fencer already holds adds a history entry that changes nothing.
+- At short distance a hit to the mask now falls about 2 cm short, because the hit no longer moves the feet to get there; step in or use a lunge.
 - After a beat the blades stay in contact (the picture is the moment of the beat); a flèche hit from the en garde lines needs nearly its 3 m limit.
 - From above, the sketch draws the fencers small, because the piste is long.
 - With the sketch open on a small screen the 3D view is short; Fit both (Z) reframes it.

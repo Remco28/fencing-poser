@@ -18,6 +18,7 @@ import { jointPosition, solveRig, type Rig } from '../rig/kinematics.ts';
 import { frontToe } from '../scene/measure.ts';
 import { frameAt } from '../viewer/player.ts';
 import { layAgainst, outsideOf, pointTo, pushBlades, swingBlade, targetPoint, touch } from '../ik/blades.ts';
+import { editKept, pick, placesOf } from '../ik/drag.ts';
 import { pinFor } from '../ik/path.ts';
 
 // Named fencing actions ("A lunges", "B parries six") turned into poses, so a
@@ -190,9 +191,11 @@ interface Stepped {
 /**
  * Footwork is measured from the back foot, wherever the hips are: a lunge
  * keeps it where it is, an advance or retreat carries it one step, a flèche
- * runs on from where en garde over it would stand. None of them passes the
- * opponent's front toe, and none goes backward to avoid it: a lunge becomes
- * shallower, an advance shorter.
+ * runs on from where en garde over it would stand. What counts is where a
+ * move ENDS: none may end past the opponent's front toe, and none goes
+ * backward to avoid it (a lunge becomes shallower, an advance shorter); from
+ * toes already overlapping, a move that ends behind the toe is allowed.
+ * Retreat, which only ever moves away, is never refused.
  */
 function footwork(c: Combination, poses: Poses, f: FencerId, move: Footwork, presets?: PresetPose[]): Stepped {
   const pose = poses[f];
@@ -219,9 +222,11 @@ function footwork(c: Combination, poses: Poses, f: FencerId, move: Footwork, pre
       const fit = lungeWithin(c, poses, f, pose, want, presets);
       return fit ? { pose: fit.pose, cramped: fit.depth < want ? 'short' : undefined } : blocked;
     }
-    case 'recover':
-      // Back to en garde, arm and all, over the back foot. Never shifted.
-      return { pose: plantRear(c, f, pose, { ...pose, joints: presetJoints(c, f, 'en-garde', presets) }) };
+    case 'recover': {
+      // Back to en garde, arm and all, over the back foot. Never shifted: if en garde there would stand past the opponent's toe, there is no room.
+      const guard = plantRear(c, f, pose, { ...pose, joints: presetJoints(c, f, 'en-garde', presets) });
+      return room(c, poses, f, guard) < FITS ? blocked : { pose: guard };
+    }
     case 'fleche':
       return forward(flecheFrom(c, f, pose, presets), FLECHE_TRAVEL);
   }
@@ -398,58 +403,70 @@ function hit(c: Combination, poses: Poses, f: FencerId, area: TargetArea, w: Hit
 }
 
 function hitBy(c: Combination, poses: Poses, f: FencerId, area: TargetArea, w: HitWith, presets?: PresetPose[]): ActionResult {
+  const done = (pose: Pose, short: number): ActionResult => ({ poses: pushBlades(c, poses, { ...poses, [f]: pose }, f), short });
+  /** No room for the footwork asked for: the arm alone, and say so. */
+  const armOnly = (): ActionResult => ({ ...hitBy(c, poses, f, area, 'arm', presets), cramped: 'short' });
   if (w === 'arm') {
-    const r = touch(c, poses, f, area);
-    return { poses: pushBlades(c, poses, r.poses, f), short: r.short };
+    const r = standing(c, poses, f, area, poses[f]);
+    return done(r.pose, r.short);
   }
   if (w === 'lunge') {
     // Only as deep a lunge as the hit needs: a near target (the hand, the
     // arm) is hit with a short lunge, not by folding the arm up in a full
-    // one; and never so deep that the front toe passes the opponent's.
-    let best: ActionResult | null = null;
+    // one; and never so deep that the finished hit has its front toe past
+    // the opponent's.
+    let best: { pose: Pose; short: number } | null = null;
     for (const depth of LUNGE_DEPTHS) {
       const lunged = lungePose(c, f, poses[f], depth, presets);
       if (room(c, poses, f, lunged) < FITS) break;
-      const r = landed(c, poses, f, area, lunged);
-      if (!r) continue;
-      if (!best || r.short! < best.short!) best = r;
+      const r = standing(c, poses, f, area, lunged);
+      if (room(c, poses, f, r.pose) < FITS) continue;
+      if (!best || r.short < best.short) best = r;
       if (r.short === 0) break;
     }
-    // No room to lunge at all: the arm alone.
-    return best ?? hitBy(c, poses, f, area, 'arm', presets);
+    return best ? done(best.pose, best.short) : armOnly();
   }
-  // Flèche: from where en garde over the back foot stands, run in only as far as it takes to land.
+  // Flèche: from where en garde over the back foot stands, run forward only
+  // as far as it takes to land, and never past the opponent's toe. (The feet
+  // of a flèche are leaving the floor: they are left as the reach has them.)
   const fleche = flecheFrom(c, f, poses[f], presets);
   const fwd = FORWARD[f];
-  const tryAt = (x: number) => {
-    const placed = place(c, poses, f, at(fleche, x));
-    return { placed, r: touch(c, { ...poses, [f]: placed }, f, area) };
-  };
   const x0 = fleche.root.x;
-  const x = edge((x) => tryAt(x).r.short === 0, x0, fwd, false, FLECHE_MAX);
-  const { r } = tryAt(x ?? x0 + fwd * FLECHE_MAX);
-  return { poses: pushBlades(c, poses, r.poses, f), short: r.short };
+  const gap = room(c, poses, f, fleche);
+  if (gap < FITS) return armOnly();
+  const limit = Math.max(0, Math.min(FLECHE_MAX, gap, PISTE_HALF - x0 * fwd));
+  const tryAt = (x: number) => {
+    const r = touch(c, { ...poses, [f]: at(fleche, x) }, f, area);
+    return { r, fits: room(c, poses, f, r.poses[f]) >= FITS };
+  };
+  const x = edge((x) => {
+    const t = tryAt(x);
+    return t.fits && t.r.short === 0;
+  }, x0, fwd, false, limit);
+  const end = tryAt(x ?? x0 + fwd * limit);
+  // Leaning in at the very end of the run would carry the toe past: no room after all.
+  return end.fits ? done(end.r.poses[f], end.r.short) : armOnly();
 }
 
 /**
- * The hit from a lunge already placed. Reaching may lean the body, which
- * tips the feet: the back foot is put back where the lunge had it and the
- * arm re-aimed, so the finished hit still stands on that foot. Null if the
- * finished pose would put the front toe past the opponent's.
+ * The hit from a stance already taken. Reaching may lean the hips, which
+ * swings the legs with them: so both feet are put back where the stance has
+ * them (the legs re-bend under the leaning hips; if a foot could not stay,
+ * less of the lean is used), the arm is aimed again, and how far short it
+ * fell is worked out from that finished pose. A hit never moves the feet it
+ * stands on.
  */
-function landed(c: Combination, poses: Poses, f: FencerId, area: TargetArea, lunged: Pose): ActionResult | null {
+function standing(c: Combination, poses: Poses, f: FencerId, area: TargetArea, stance: Pose): { pose: Pose; short: number } {
   const opp = other(f);
-  const reached = touch(c, { ...poses, [f]: lunged }, f, area);
-  let pose = plantRear(c, f, lunged, reached.poses[f]);
-  let short = reached.short;
-  if (pose !== reached.poses[f]) {
-    const target = targetPoint(rigOf(c, opp, poses[opp]), area, weaponSide(c, opp), rigOf(c, f, pose).tip);
-    const aimed = pointTo(c, f, pose, target);
-    pose = aimed.pose;
-    short = aimed.miss < 0.02 ? 0 : aimed.miss;
-  }
-  if (room(c, poses, f, pose) < FITS) return null;
-  return { poses: pushBlades(c, poses, { ...poses, [f]: pose }, f), short };
+  const setup = c.fencers[f];
+  const reached = touch(c, { ...poses, [f]: stance }, f, area);
+  const feet = pick(placesOf(stance, setup, HEADING[f]), ['foot_r', 'foot_l']);
+  const planted = editKept(feet, stance, reached.poses[f], setup, HEADING[f]).pose;
+  // The feet never moved (no lean was needed): the reach stands as it is.
+  if (planted === reached.poses[f]) return { pose: planted, short: reached.short };
+  const target = targetPoint(rigOf(c, opp, poses[opp]), area, weaponSide(c, opp), rigOf(c, f, planted).tip);
+  const aimed = pointTo(c, f, planted, target);
+  return { pose: aimed.pose, short: aimed.miss < 0.02 ? 0 : aimed.miss };
 }
 
 // ---------------------------------------------------------------------------

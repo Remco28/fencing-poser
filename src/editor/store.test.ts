@@ -1,6 +1,7 @@
 import { Vector3 } from 'three';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { dragDot } from '../ik/drag.ts';
+import { dotPositions, dragDot, dragDotKept, keptInDrag, keptInSlide, slideFencer, type Dot } from '../ik/drag.ts';
+import { HEADING } from '../model/combination.ts';
 import { jointPosition, solveRig } from '../rig/kinematics.ts';
 import { START_X } from '../model/combination.ts';
 import { mirrorPose } from '../model/mirror.ts';
@@ -629,5 +630,180 @@ describe('review round 1: kept things win over keys, typed angles, Straighten an
     // Pulled back further than the arm is long, the hips stop where the hand can still be kept.
     const far = dragDot(from, setup, 0, 'hips', jointPosition(r0, 'pelvis').add(new Vector3(-0.8, 0, 0)), { feet: false, hand: true, point: false });
     expect(jointPosition(solveRig(setup, far, 0), 'wrist_r').distanceTo(hand)).toBeLessThan(0.015);
+  });
+});
+
+describe('review round 2: one memory of kept places per fencer, shared by keys and drags', () => {
+  const preset = (id: string) => BUILT_IN_PRESETS.find((p) => p.id === id)!;
+  const rigOf = (f: 'A' | 'B' = state().active) => solveRig(state().combination.fencers[f], currentStep(state()).poses[f], HEADING[f]);
+  const at = (j: 'ankle_l' | 'ankle_r' | 'wrist_r' | 'pelvis' | 'knee_r', f: 'A' | 'B' = 'A') => jointPosition(rigOf(f), j);
+  let dragIds = 5000;
+  /** One whole drag of a dot, as the sketch and the 3D handles make it: places fixed at pointer-down, then the pointer moves. */
+  const drag = (dot: Dot, by: [number, number, number], moves = 3) => {
+    const s = state();
+    const f = s.active;
+    const setup = s.combination.fencers[f];
+    const from = currentStep(s).poses[f];
+    const spots = s.spotsFor(f, keptInDrag(setup, s.keep, dot));
+    const start = dotPositions(solveRig(setup, from, HEADING[f]))[dot];
+    const id = ++dragIds;
+    for (let i = 1; i <= moves; i++) {
+      const target = start.clone().add(new Vector3(...by).multiplyScalar(i / moves));
+      const r = dragDotKept(from, setup, HEADING[f], dot, target, state().keep, spots);
+      state().dragPose(r.pose, id, { fencer: f, stepId: currentStep(state()).id, pose: from, spots, cut: r.cut });
+    }
+  };
+  const slide = (dx: number) => {
+    const s = state();
+    const f = s.active;
+    const from = currentStep(s).poses[f];
+    const spots = s.spotsFor(f, keptInSlide(s.keep));
+    const r = slideFencer(from, s.combination.fencers[f], HEADING[f], from.root.x + dx, from.root.z, s.keep, spots);
+    s.dragPose(r.pose, ++dragIds, { fencer: f, stepId: currentStep(s).id, pose: from, spots, cut: r.cut });
+  };
+
+  it('keeps A’s feet however the coach alternates between the fencers (R2-1)', () => {
+    const feet = [at('ankle_r'), at('ankle_l')];
+    for (let i = 0; i < 25; i++) {
+      state().setAngle('pelvis', 'turn', angle(pose(), 'pelvis', 'turn') - 2);
+      state().setActive('B');
+      state().setAngle('neck', 'turn', i);
+      state().setActive('A');
+    }
+    expect(Math.max(at('ankle_r').distanceTo(feet[0]), at('ankle_l').distanceTo(feet[1]))).toBeLessThanOrEqual(0.0201);
+  });
+
+  it('keeps a kept hand through any number of separate drags, of the hips or of the floor marker (R2-2)', () => {
+    for (const how of ['hips', 'floor'] as const) {
+      useEditor.setState(initial, true);
+      state().applyPreset(preset('extension'));
+      state().toggleKeep('feet');
+      state().toggleKeep('hand');
+      const hand = at('wrist_r');
+      for (let i = 0; i < 15; i++) how === 'hips' ? drag('hips', [-0.1, 0, 0]) : slide(-0.1);
+      expect(at('wrist_r').distanceTo(hand)).toBeLessThanOrEqual(0.0201);
+      state().toggleKeep('feet');
+      state().toggleKeep('hand');
+    }
+  });
+
+  it('keeps the feet through runs of drags and keys mixed together', () => {
+    state().applyPreset(preset('lunge'));
+    const feet = [at('ankle_r'), at('ankle_l')];
+    for (let i = 0; i < 12; i++) {
+      drag('hips', [0.12, 0.05, 0]);
+      state().setAngle('pelvis', 'turn', angle(pose(), 'pelvis', 'turn') + 3);
+      drag('chest', [0.1, 0, 0]);
+      // Typing the angle a joint already has commits nothing, and must not lose the memory either.
+      state().setAngle('neck', 'turn', angle(pose(), 'neck', 'turn'));
+    }
+    expect(Math.max(at('ankle_r').distanceTo(feet[0]), at('ankle_l').distanceTo(feet[1]))).toBeLessThanOrEqual(0.0201);
+  });
+
+  it('never moves a knee’s own kept foot, or the other foot, however far a dot is dragged (G1)', () => {
+    for (const start of ['en-garde', 'lunge']) {
+      for (const [dot, by] of [['knee_r', [-0.35, 0, 0]], ['knee_r', [0, 0, 0.35]], ['knee_l', [-0.35, 0, 0]], ['knee_l', [0, 0, 0.35]]] as [Dot, [number, number, number]][]) {
+        useEditor.setState(initial, true);
+        state().applyPreset(preset(start));
+        const feet = [at('ankle_r'), at('ankle_l')];
+        drag(dot, by);
+        expect(Math.max(at('ankle_r').distanceTo(feet[0]), at('ankle_l').distanceTo(feet[1])), `${start} ${dot} ${by}`).toBeLessThanOrEqual(0.0201);
+      }
+    }
+    // In a lunge, the back foot dragged forward: the front foot stays.
+    useEditor.setState(initial, true);
+    state().applyPreset(preset('lunge'));
+    const front = at('ankle_r');
+    drag('foot_l', [0.35, 0, 0]);
+    expect(at('ankle_r').distanceTo(front)).toBeLessThanOrEqual(0.0201);
+    // And a small knee drag still does what it is for.
+    useEditor.setState(initial, true);
+    const knee = at('knee_r');
+    drag('knee_r', [0, 0, 0.05]);
+    expect(at('knee_r').distanceTo(knee)).toBeGreaterThan(0.01);
+  });
+
+  it('does not pull back a hand the coach dragged while the point was kept, nor a blade turned while the hand was kept', () => {
+    state().toggleKeep('point');
+    state().setAngle('pelvis', 'lean', 3);
+    drag('hand_r', [0.1, 0.05, 0]);
+    const hand = at('wrist_r');
+    state().setAngle('pelvis', 'lean', 5);
+    expect(at('wrist_r').distanceTo(hand)).toBeLessThan(0.03);
+    state().toggleKeep('point');
+
+    state().toggleKeep('hand');
+    drag('point', [0, 0.15, 0.1]);
+    const blade = rigOf().tip.clone().sub(rigOf().guard).normalize();
+    state().setAngle('pelvis', 'lean', 8);
+    expect(rigOf().tip.clone().sub(rigOf().guard).normalize().dot(blade)).toBeGreaterThan(0.99);
+    state().toggleKeep('hand');
+  });
+
+  it('forgets a fencer’s kept places when their build changes, so a later key does not re-bend the legs (U1)', () => {
+    state().select('pelvis');
+    state().nudge(0, 2);
+    state().setSetup({ build: 1.15 }, 'A');
+    const before = pose();
+    state().select('neck');
+    state().nudge(0, 2);
+    for (const j of ['hip_r', 'knee_r', 'ankle_r', 'hip_l', 'knee_l', 'ankle_l'] as const) expect(pose().joints[j]).toEqual(before.joints[j]);
+  });
+
+  it('clears the “held back” line when the fencer or the step changes, however that happens (U2)', () => {
+    const hold = () => {
+      useEditor.setState(initial, true);
+      state().applyPreset(preset('lunge'));
+      state().setAngle('pelvis', 'turn', angle(pose(), 'pelvis', 'turn') + 20);
+      expect(state().heldBack).not.toBeNull();
+    };
+    for (const change of [
+      () => state().addStep(),
+      () => state().setActive('B'),
+      () => state().select('neck', 'B'),
+      () => state().setSetup({ build: 1.1 }, 'A'),
+      () => (state().addStep(), state().goToStep(0), state().deleteStep()),
+    ]) {
+      hold();
+      change();
+      expect(state().heldBack).toBeNull();
+    }
+  });
+
+  it('ends a drag when another fencer is selected, the step changes, or something else edits the fencer mid-drag (U3)', () => {
+    const begin = () => {
+      const s = state();
+      const from = currentStep(s).poses.A;
+      const setup = s.combination.fencers.A;
+      const start = at('wrist_r');
+      const id = ++dragIds;
+      const move = (dx: number) => {
+        const r = dragDotKept(from, setup, 0, 'hand_r', start.clone().add(new Vector3(dx, 0, 0)), state().keep, {});
+        state().dragPose(r.pose, id, { fencer: 'A', stepId: currentStep(s).id, pose: from, spots: {}, cut: r.cut });
+      };
+      return move;
+    };
+    // F pressed mid-drag.
+    let move = begin();
+    move(0.05);
+    const b = currentStep(state()).poses.B;
+    state().setActive('B');
+    move(0.1);
+    expect(currentStep(state()).poses.B).toBe(b);
+    state().setActive('A');
+    // A key pressed mid-drag: the key's edit stands, the rest of the drag is ignored.
+    move = begin();
+    move(0.05);
+    state().advance(0.05);
+    const stepped = pose();
+    move(0.1);
+    expect(pose()).toBe(stepped);
+    // Another step mid-drag.
+    move = begin();
+    move(0.05);
+    state().addStep();
+    const copy = pose();
+    move(0.1);
+    expect(pose()).toBe(copy);
   });
 });
