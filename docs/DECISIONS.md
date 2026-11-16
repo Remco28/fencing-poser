@@ -9,6 +9,26 @@ Every decision that shapes the app, newest first within each group, with the rea
 | 2026-10-12 | **Keep the app lean.** After each round, ask what can be deleted, merged or made better before adding more. Every option must earn its place. | The coach does not want the app bloated with options and features; what makes or breaks it is how easy it is to use. |
 | 2026-10-12 | **UI is the priority.** Ease of posing and clarity of controls come before new features. | Coach: "Let's keep pushing UI because that is what will make or break this project." |
 
+## Look and layout
+
+Agreed with the coach on 2026-11-15, from mock-ups (`docs/mockups/2026-11-redesign/`). Colours for the page are the variables at the top of `src/styles.css`; their twins for the 3D scene are in `src/design.ts`. Add a value there under a name; never type a colour or size in place.
+
+| Date | Decision | Why |
+|---|---|---|
+| 2026-11-15 | **The theme is wooden figures on a desk. The warmth lives in the 3D scene only** (wood, a pale desk in daylight, a felt-topped board for the piste). Buttons and panels are plain paper and ink, and few. No wood-grain panels. | The coach's idea: someone plotting moves with figurines on their desk. The interface must still be clean enough not to distract from the work. |
+| 2026-11-15 | **One accent: ink blue.** It means selected or on: a selected joint, drag dots, the point's path, a pressed chip. | Before, orange meant five different things and was close to the colour of the wood. |
+| 2026-11-15 | **Red and green mean a touch, and nothing else**: red for A, green for B, as on the scoring box (A stands on the left). A step whose hit marks a target shows the light on its picture, in the student viewer and in the handout. Off balance is amber. | Every fencer reads the lights at once; using red for anything else would weaken that. |
+| 2026-11-15 | **A is light wood (maple), B is dark wood (walnut).** The blade is darker than polished steel. | The two are told apart on a phone and when blades cross, without tags; a pale blade vanished against a pale desk. |
+| 2026-11-15 | **Daylight, not lamplight; no rendering effects** beyond one shadow light, haze and textures drawn in code. | A pale scene prints, suits long sessions and matches paper-coloured panels. Dragging must stay smooth and phones must cope. |
+| 2026-11-15 | **What is selected decides which tools show.** On the desk: the combinations. Nothing selected: the top bar, the storyboard and Play. A fencer picked: that fencer's tray (actions, poses, keep still) and the dots to drag. A joint selected: its controls beside it. The side panel with tabs is gone. | About 80 controls were on screen before the first click. Tools should be at arm's reach, not all out at once. |
+| 2026-11-15 | **The app opens on the desk**: the figures, and the coach's combinations as a searchable list with a picture each. Picking one moves the view in; the arrow at the top left goes back. A reload while working stays in the editor. Folders, backups, importing, moving and deleting are one step further, under Manage. | A place to start from and return to, so each move to the next thing is one obvious step. A literal desk of objects would not hold 50 combinations; a list does. |
+| 2026-11-15 | **The step bar is a storyboard**: each step is a picture, painted from the side and framed on both fencers. A step's label, notes, targets and timing are under ⋯ on its card. | The finished product is in sight while it is made. |
+| 2026-11-15 | **The 3D view fills the window and the panels lie over it**; the picture slides so its subject sits in the part left clear, and the view buttons frame within that part. | The desk continues under the paper, which is the look; and nothing is hidden under a panel. |
+| 2026-11-15 | **A click on the bare desk lets go of the joint but does not close the fencer's tray.** Esc, or the tray's ×, does. | A click that just misses a thin arm would otherwise put the fencer down. |
+| 2026-11-15 | **The sketch is a sheet of paper under the view, drawn as pencil**; the fencer not being posed is drawn lighter. Its dots and the dots on the 3D figure look the same: paper with a ring, filled in while kept in place. | One look for one kind of control, and the theme lands without decoration. |
+| 2026-11-15 | **Type: Fraunces for titles, Inter for everything else**, both bundled with the app. | Titles read as written on a card; controls stay plain. Bundled, so the app looks the same on every machine and works offline. |
+| 2026-11-15 | **Not done: the handout PDF in the app's own type.** It keeps Helvetica. | The PDF library needs font files in a form the bundled fonts do not come in; the pictures and the touch lights already match the screen. |
+
 ## Product
 
 | Date | Decision | Why |

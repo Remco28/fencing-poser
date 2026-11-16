@@ -24,14 +24,20 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Balance**: centre of mass from a segment-mass model; an "off balance" mark appears under a fencer whose centre lies outside the feet (editor only). `src/rig/balance.ts`, `src/scene/BalanceMark.tsx`
 
 ### Combinations
-- **Steps** with label, notes, targets and timing; new steps copy the current one; the step bar with Play and a ⋯ menu per step. `src/editor/StepBar.tsx`, `src/model/combination.ts`
+- **Steps** with label, notes, targets and timing; new steps copy the current one; the storyboard along the bottom shows each step as a picture, with Play and a ⋯ card per step (label, notes, targets, timing, order). `src/editor/Storyboard.tsx`, `src/editor/thumbs.tsx`, `src/model/combination.ts`
 - **Path shaping**: click the arrow between two steps (or, with Ghost on, the "Shape the path" button or the red trail) and grab a point's red path anywhere to bend the movement (e.g. under the blade), pinning it in up to three places (double-click a ring to remove it); stored as pins (`Step.pins`: a moment and a change to the arm's joints), carried through by a smooth spline so the point glides. `src/ik/path.ts`, `src/ik/PathHandles.tsx`, `src/model/tween.ts`
 - **Undo/redo** for every change; a drag or a held key undoes as one step. `src/editor/store.ts`
-- **Camera**: drag turns, right-drag pans, scroll zooms to the pointer; Side, Overhead, Fit both, and per fencer Behind and Zoom; Lock. The working view is the coach's own; what students see for a step is set on purpose ("Use this view for students", "Students' view", One view for all steps). `src/scene/CameraRig.tsx`, `FitRig.tsx`, store `setShot` / `showShot` / `clearShot`
+- **Camera**: drag turns, right-drag pans, scroll zooms to the pointer; Side, Above, Behind (the fencer being posed) and Fit, each framed within the part of the window not under a panel; Lock under Show. The working view is the coach's own; what students see for a step is set on purpose (the Students’ view button in the top bar: use this view, go to it, clear it, One view for all steps). `src/scene/CameraRig.tsx`, `FitRig.tsx`, store `setShot` / `showShot` / `clearShot`
 - **Show**: distances (feet, point to opponent, "Touch"), ghost of the previous step, labels. `src/scene/measure.ts`
-- **Play** in the editor (Space), a **timeline** to scrub between steps, and **Loop**. `src/editor/StepBar.tsx`, `src/scene/playback.tsx`, `src/viewer/player.ts`
+- **Play** in the editor (Space), a **timeline** to scrub between steps, and **Loop**. `src/editor/Storyboard.tsx`, `src/scene/playback.tsx`, `src/viewer/player.ts`
 - **Point trail** with the ghost and while shaping a path. `src/scene/PointTrail.tsx`
 - **First-run tour** (four cards; Help → Show the quick tour again). `src/editor/Tour.tsx`
+
+### Look and layout
+- **The scene**: a pale desk in daylight, a felt-topped board for the piste, fencer A in light wood and B in dark. Every scene colour is in `src/design.ts`; textures are drawn in code. `src/scene/Environment.tsx`, `Piste.tsx`, `textures.ts`, `src/rig/Mannequin.tsx`
+- **The desk** on opening: the coach's combinations as a searchable list with a picture each, New combination, and Manage for the rest of the library. `src/editor/Desk.tsx`
+- **The editor**: the 3D view fills the window; over it, the top bar (title, views, Show, Students’ view, Sketch, undo, History, Help, Share), the tray of the fencer being posed, the sketch sheet and the storyboard. What shows depends on what is selected. `src/editor/Editor.tsx`, `TopBar.tsx`, `Tray.tsx`, `ui.ts` (screen state), `views.ts`, `src/scene/ClearView.tsx`
+- **One style sheet** built on a short list of named values, with Inter and Fraunces bundled. `src/styles.css`, `src/ui/` (Icon, Popover, Switch, Toggle)
 
 ### Library and sharing
 - **Library**: autosave in the browser, collections, search, sort, export selected, import with newest-wins merge, folder sync with 14 daily snapshots, persistent storage. `src/library/`, `src/editor/LibraryDialog.tsx`
@@ -49,7 +55,6 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 ## Next
 
 - The coach tries the sketch and the actions on real phrases; fix what reads wrong as fencing (see Known rough edges).
-- A redesign of the look and layout is under way in parallel (office work #207): the side panel goes away, the step bar becomes a storyboard. Behaviour (store, `src/ik`, `src/actions`, sketch maths) stays as built here.
 - Later, if wanted: typing a phrase ("A: beat 6, disengage, lunge to the hand") to draft the steps; a drawing or photo behind the sketch to trace.
 
 ## Deliberately not done

@@ -92,7 +92,7 @@ Poses are stored as joint angles, not positions, so a preset works on a fencer o
 
 ### 3.4 Look
 
-Wooden-mannequin style built from simple rounded shapes, with visible joint spheres. The figures are built in code, so no 3D modelling tools are needed and every joint is explicit. Fencer identification uses an optional red/green accent (like the scoring lights), off by default. See [Open decisions](#13-open-decisions).
+Wooden-mannequin style built from simple rounded shapes, with visible joint spheres. The figures are built in code, so no 3D modelling tools are needed and every joint is explicit. Since 2026-11-15 fencer A is light wood and B dark wood, on a pale desk; red and green are kept for a touch (see "Look and layout" in [DECISIONS.md](DECISIONS.md)). See [Open decisions](#13-open-decisions).
 
 ---
 

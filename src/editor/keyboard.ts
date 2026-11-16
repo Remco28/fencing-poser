@@ -58,7 +58,7 @@ export function useKeyboardPosing() {
       }
 
       if (key === 'Tab') {
-        // Tab still walks the panel's controls when one of them has focus.
+        // Tab still walks a panel's controls when one of them has focus.
         if (e.target instanceof HTMLElement && e.target.closest('.card, dialog')) return;
         e.preventDefault();
         s.selectNext(e.shiftKey ? -1 : 1);

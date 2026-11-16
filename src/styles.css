@@ -16,7 +16,7 @@
   --paper: #fbf8f2;
   --paper-clear: rgba(251, 248, 242, 0.93);
   --raised: #fffdf9;
-  --quiet: #efe8da;
+  --quiet: #efe7d9;
   --quiet-strong: #e6dccb;
   --ink: #26221d;
   --ink-2: #6f675c;
@@ -45,17 +45,25 @@
   --font-title: 'Fraunces Variable', Fraunces, 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
   --text: 13px;
   --text-small: 12px;
+  --text-chip: 12.5px;
   --text-tiny: 10.5px;
   --text-large: 15px;
+  --title-small: 16px;
   --title: 19px;
+  --title-medium: 22px;
   --title-large: 30px;
 
   /* shape */
   --control: 32px;
   --control-small: 26px;
-  --radius: 9px;
+  --radius-line: 2px;
+  --radius-tiny: 5px;
   --radius-small: 8px;
+  --radius: 9px;
+  --radius-large: 12px;
   --radius-card: 14px;
+  --radius-sheet: 20px;
+  --radius-pill: 999px;
   --gap: 8px;
   --pad: 14px;
   --edge: 20px;
@@ -152,7 +160,7 @@ button.primary:active:not(:disabled) {
 button.big {
   height: 44px;
   padding: 0 18px;
-  border-radius: 12px;
+  border-radius: var(--radius-large);
   font-size: var(--text-large);
 }
 
@@ -163,7 +171,7 @@ button.small {
   border: 0;
   border-radius: var(--radius-small);
   background: var(--quiet);
-  font-size: 12.5px;
+  font-size: var(--text-chip);
 }
 
 button.small:hover:not(:disabled) {
@@ -307,7 +315,7 @@ kbd {
   font: 600 var(--text-tiny) var(--font-ui);
   color: var(--ink-2);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-tiny);
   padding: 1px 5px;
   background: var(--raised);
   white-space: nowrap;
@@ -317,7 +325,7 @@ code {
   font: var(--text-small) ui-monospace, 'SFMono-Regular', Menlo, monospace;
   background: var(--quiet);
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-tiny);
 }
 
 hr {
@@ -417,10 +425,10 @@ p {
   height: var(--control-small);
   padding: 0 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: calc(var(--radius) - 2px);
   background: none;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: var(--text-chip);
 }
 
 .toggle button.on {
@@ -443,7 +451,7 @@ button.switch .track {
   position: relative;
   width: 28px;
   height: 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-pill);
   background: var(--ink-3);
   flex: none;
   transition: background 0.15s;
@@ -1144,7 +1152,7 @@ input.title:hover {
   align-items: center;
   gap: 6px;
   border: 0;
-  border-radius: 15px;
+  border-radius: var(--radius-pill);
   background: rgba(38, 34, 29, 0.8);
   color: var(--paper);
   font-weight: 500;
@@ -1161,7 +1169,7 @@ input.title:hover {
 button.prompt.stop {
   height: 40px;
   padding: 0 20px;
-  border-radius: 20px;
+  border-radius: var(--radius-pill);
   font-size: var(--text-large);
   pointer-events: auto;
 }
@@ -1201,7 +1209,7 @@ button.prompt.stop:active:not(:disabled) {
 }
 
 .hud-head button {
-  font-size: 18px;
+  font-size: var(--title);
   line-height: 1;
   color: var(--ink-2);
 }
@@ -1213,7 +1221,7 @@ button.prompt.stop:active:not(:disabled) {
   gap: 4px;
   padding: 3px 4px;
   border-left: 4px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-tiny);
   transition: background 0.4s;
 }
 
@@ -1284,7 +1292,7 @@ input.hud-input {
   height: 22px;
   padding: 0 4px;
   border-color: var(--accent);
-  border-radius: 5px;
+  border-radius: var(--radius-tiny);
   text-align: center;
 }
 
@@ -1311,7 +1319,7 @@ input.hud-input {
 
 .hud-mods span {
   padding: 1px 6px;
-  border-radius: 5px;
+  border-radius: var(--radius-tiny);
 }
 
 .hud-mods span.held {
@@ -1363,7 +1371,7 @@ input.hud-input {
   grid-row: 3;
   grid-column: 1 / -1;
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
+  border-radius: var(--radius-tiny);
   background: var(--paper);
   box-shadow:
     0 1px 0 var(--raised) inset,
@@ -1401,7 +1409,7 @@ input.hud-input {
   width: 36px;
   height: 4px;
   margin-left: -18px;
-  border-radius: 2px;
+  border-radius: var(--radius-line);
   background: var(--line-strong);
 }
 
@@ -1582,7 +1590,7 @@ input.hud-input {
   stroke-width: 4px;
   stroke-linejoin: round;
   fill: var(--ink-2);
-  font-size: 11px;
+  font-size: var(--text-tiny);
   font-weight: 500;
   text-anchor: middle;
   font-variant-numeric: tabular-nums;
@@ -1594,7 +1602,7 @@ input.hud-input {
 
 .sk-gap.on text {
   fill: var(--ink);
-  font-size: 12px;
+  font-size: var(--text-small);
   font-weight: 600;
 }
 
@@ -1653,7 +1661,7 @@ input.hud-input {
 
 .scrubber::-webkit-slider-runnable-track {
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-line);
   background:
     linear-gradient(var(--accent), var(--accent)) no-repeat left / var(--at, 0%) 100%,
     var(--line-strong);
@@ -1661,13 +1669,13 @@ input.hud-input {
 
 .scrubber::-moz-range-track {
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-line);
   background: var(--line-strong);
 }
 
 .scrubber::-moz-range-progress {
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-line);
   background: var(--accent);
 }
 
@@ -1808,7 +1816,7 @@ button.pic {
   padding: 0 4px;
   display: inline-flex;
   align-items: center;
-  border-radius: 9px;
+  border-radius: var(--radius-pill);
   background: var(--paper-clear);
   color: var(--ink-2);
 }
@@ -1992,7 +2000,7 @@ button.add-step:hover:not(:disabled) {
   height: 36px;
   margin-top: 20px;
   padding: 0 11px;
-  border-radius: 10px;
+  border-radius: var(--radius-large);
   background: var(--quiet);
   color: var(--ink-3);
 }
@@ -2037,7 +2045,7 @@ button.combo {
   height: auto;
   padding: 8px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-large);
   background: none;
   text-align: left;
   white-space: normal;
@@ -2070,7 +2078,7 @@ button.combo.on {
 
 .combo strong {
   font-family: var(--font-title);
-  font-size: 16px;
+  font-size: var(--title-small);
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1.25;
@@ -2116,7 +2124,7 @@ button.combo.on {
 .tour h2 {
   margin-bottom: 6px;
   font-family: var(--font-title);
-  font-size: 22px;
+  font-size: var(--title-medium);
   font-weight: 500;
   letter-spacing: -0.01em;
 }
@@ -2144,7 +2152,7 @@ dialog.library {
   max-height: calc(100vh - 64px);
   padding: 22px 24px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--radius-sheet);
   background: var(--paper);
   color: var(--ink);
   box-shadow: var(--shadow);
@@ -2169,7 +2177,7 @@ dialog.library::backdrop {
 
 dialog.library h2 {
   font-family: var(--font-title);
-  font-size: 22px;
+  font-size: var(--title-medium);
   font-weight: 500;
   letter-spacing: -0.01em;
 }
@@ -2202,7 +2210,7 @@ dialog.library > .buttons {
   height: var(--control-small);
   padding: 0 10px;
   border: 0;
-  border-radius: 13px;
+  border-radius: var(--radius-pill);
   background: var(--quiet);
   font-size: var(--text-small);
 }
@@ -2256,7 +2264,7 @@ dialog.library > .buttons {
 
 .library-list .open strong {
   font-family: var(--font-title);
-  font-size: 16px;
+  font-size: var(--title-small);
   font-weight: 500;
 }
 
@@ -2283,7 +2291,7 @@ dialog.library > .buttons {
 .library-list .badge {
   margin-left: 8px;
   padding: 1px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-large);
   background: var(--quiet);
   font-family: var(--font-ui);
   font-size: var(--text-tiny);
@@ -2380,7 +2388,7 @@ dialog.library > .buttons {
   max-width: 420px;
   margin: 20vh auto;
   padding: 0 var(--edge);
-  font-size: 16px;
+  font-size: var(--title-small);
   line-height: 1.5;
 }
 
@@ -2407,7 +2415,7 @@ dialog.library > .buttons {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-title);
-  font-size: 17px;
+  font-size: var(--title-small);
   font-weight: 500;
   letter-spacing: -0.01em;
 }
@@ -2451,10 +2459,10 @@ button.round.main:active:not(:disabled) {
 
 .viewer-panel {
   position: relative;
-  margin-top: -22px;
+  margin-top: calc(-1 * var(--radius-sheet));
   padding: 18px var(--edge) calc(18px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
-  border-radius: 22px 22px 0 0;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   background: var(--paper);
   box-shadow: 0 -12px 30px -14px rgba(70, 52, 25, 0.3);
 }
@@ -2470,7 +2478,7 @@ button.round.main:active:not(:disabled) {
 .viewer-ticks li {
   flex: 1;
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-line);
   background: var(--quiet-strong);
 }
 
@@ -2500,7 +2508,7 @@ button.round.main:active:not(:disabled) {
 .viewer-panel h2 {
   margin: 6px 0 0;
   font-family: var(--font-title);
-  font-size: 23px;
+  font-size: var(--title-medium);
   font-weight: 500;
   line-height: 1.18;
   letter-spacing: -0.015em;
@@ -2543,11 +2551,11 @@ button.round.main:active:not(:disabled) {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    margin: 0 0 0 -22px;
+    margin: 0 0 0 calc(-1 * var(--radius-sheet));
     padding: 28px;
     border-top: 0;
     border-left: 1px solid var(--line);
-    border-radius: 22px 0 0 22px;
+    border-radius: var(--radius-sheet) 0 0 var(--radius-sheet);
     box-shadow: -12px 0 30px -14px rgba(70, 52, 25, 0.3);
   }
 

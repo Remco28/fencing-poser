@@ -43,7 +43,7 @@ function useRingTexture() {
 }
 
 /**
- * Shaping the movement into step `to`: grab a point's red path anywhere and
+ * Shaping the movement into step `to`: grab a point's blue path anywhere and
  * pull it. Where you grab becomes a pin (a ring), up to three per point;
  * grabbing near a ring moves that ring, and double-clicking a ring removes it.
  * With no pins yet, a ring halfway shows where to start. The poses at either
