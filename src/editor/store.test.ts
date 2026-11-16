@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { START_X } from '../model/combination.ts';
 import { mirrorPose } from '../model/mirror.ts';
-import { angle } from '../model/types.ts';
+import { JOINT_NAMES } from '../model/joints.ts';
+import { angle, type Pose } from '../model/types.ts';
 import { BUILT_IN_PRESETS } from '../presets/builtin.ts';
-import { activePose, currentStep, hasShot, useEditor, viewIsShot } from './store.ts';
+import { activePose, currentStep, hasShot, poseDial, useEditor, viewIsShot } from './store.ts';
 
 const initial = useEditor.getState();
 const enGarde = BUILT_IN_PRESETS.find((p) => p.id === 'en-garde')!;
@@ -360,5 +361,96 @@ describe('the working view and what students see', () => {
     state().startPreview();
     state().stopPreview();
     expect(state().flight?.camera).toEqual(there);
+  });
+});
+
+describe('more from poses', () => {
+  const lunge = BUILT_IN_PRESETS.find((p) => p.id === 'lunge')!;
+  const parry4 = BUILT_IN_PRESETS.find((p) => p.id === 'parry-4')!;
+  const changed = (a: Pose, b: Pose) => JOINT_NAMES.filter((n) => JSON.stringify(a.joints[n] ?? {}) !== JSON.stringify(b.joints[n] ?? {}));
+
+  it('applies a pose to the weapon arm alone, on the right side for a left-hander too', () => {
+    const before = pose();
+    state().applyPreset(parry4, 'arm');
+    expect(changed(before, pose()).sort()).toEqual(['elbow_r', 'shoulder_r', 'wrist_r']);
+    state().setSetup({ handedness: 'left' });
+    state().applyPreset(enGarde, 'all');
+    const left = pose();
+    state().applyPreset(parry4, 'arm');
+    expect(changed(left, pose()).sort()).toEqual(['elbow_l', 'shoulder_l', 'wrist_l']);
+  });
+
+  it('dials a pose back: halfway is halfway, and the click with all its dialling is one undo step', () => {
+    const before = pose();
+    state().applyPreset(lunge);
+    const full = pose();
+    expect(poseDial(state())).toEqual({ name: 'Lunge', amount: 1 });
+    state().setPoseAmount(0.5);
+    expect(angle(pose(), 'knee_r', 'flex')).toBeCloseTo((angle(before, 'knee_r', 'flex') + angle(full, 'knee_r', 'flex')) / 2, 6);
+    expect(pose().root.x).toBe(before.root.x);
+    state().setPoseAmount(0.25);
+    state().setPoseAmount(1);
+    expect(pose()).toEqual(full);
+    state().setPoseAmount(0);
+    expect(pose()).toEqual(before);
+    expect(state().past).toHaveLength(1);
+    state().setPoseAmount(0.5);
+    state().undo();
+    expect(pose()).toEqual(before);
+    expect(state().past).toHaveLength(0);
+  });
+
+  it('stops offering the dial once anything else moves either fencer', () => {
+    state().applyPreset(lunge);
+    state().setAngle('knee_l', 'flex', 20);
+    expect(poseDial(state())).toBeNull();
+    const now = pose();
+    state().setPoseAmount(0.5);
+    expect(pose()).toBe(now);
+
+    state().applyPreset(lunge);
+    state().setActive('B');
+    state().setAngle('knee_l', 'flex', 20);
+    state().setActive('A');
+    expect(poseDial(state())).toBeNull();
+
+    state().applyPreset(lunge);
+    state().addStep();
+    expect(poseDial(state())).toBeNull();
+  });
+
+  it('leaves the other fencer’s blade as it was after dialling there and back', () => {
+    state().act({ kind: 'distance', measure: 'short' });
+    const other = currentStep(state()).poses.B;
+    state().applyPreset(BUILT_IN_PRESETS.find((p) => p.id === 'extension')!);
+    for (const k of [0.8, 0.3, 0.6, 0]) state().setPoseAmount(k);
+    expect(currentStep(state()).poses.B).toEqual(other);
+  });
+
+  it('takes a pose from another step, keeping where the fencer stands', () => {
+    state().addStep();
+    state().applyPreset(lunge);
+    state().setPosition(-1);
+    const lunged = pose();
+    state().goToStep(0);
+    const here = pose().root.x;
+    state().applyStepPose(1);
+    expect(pose().joints).toEqual(lunged.joints);
+    expect(pose().root.x).toBe(here);
+    expect(state().change.label).toBe('Step 1 · A: Pose from step 2');
+    // And it can be dialled like any pose.
+    expect(poseDial(state())?.name).toBe('Pose from step 2');
+  });
+
+  it('takes the other fencer’s pose, and does nothing when asked for the pose already there', () => {
+    state().setActive('B');
+    state().applyPreset(lunge);
+    state().setActive('A');
+    const b = currentStep(state()).poses.B;
+    state().applyStepPose(0, 'B');
+    expect(pose().joints).toEqual(b.joints);
+    const edits = state().past.length;
+    state().applyStepPose(0);
+    expect(state().past).toHaveLength(edits);
   });
 });

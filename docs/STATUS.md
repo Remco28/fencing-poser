@@ -19,7 +19,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Actions**: one click per fencing action for the posing fencer: distance (short, medium, long), footwork (advance, retreat, half lunge, lunge, recover, flèche), extend, beat 4/6, engage 4/6, parries 1–8, hit a target with the arm, a lunge or a flèche, and the path in (direct, under the blade, over the blade). "New step for each action" adds and names the step. `src/actions/actions.ts`, `src/editor/ActionsPanel.tsx`
 - **Keyboard**: Tab / A D · S W · Q E / Shift / Alt / X / R and more (full list in the Help tab). `src/editor/keyboard.ts`
 - **Controls beside the joint** (the only joint controls): keys and arrows per movement, click a value to type an angle, a position row for the hips, Straighten; coloured motion paths with key tags; a **thumb clock** for the wrist; stomach and chest bend as **one spine** by default. `src/editor/JointHud.tsx`, `MotionGuides.tsx`, `ThumbDial.tsx`
-- **Presets**: footwork, seven parries, body evasions, and the coach's own, each with a ⋯ menu (apply to the other fencer, replace, rename, delete or restore); apply to the whole body, arms and torso, or legs. `src/presets/`, `src/editor/PresetsPanel.tsx`
+- **Presets**: footwork, seven parries, body evasions, and the coach's own, each with a ⋯ menu (apply to the other fencer, replace, rename, delete or restore); apply to the whole body, arms and torso, legs, or the weapon arm alone; a dial sets how far the last pose goes (halfway to a lunge); a fencer's pose can be taken from another step, or from the other fencer. `src/presets/`, `src/editor/PresetsPanel.tsx`, store `setPoseAmount` / `applyStepPose`
 - **Blades**: a parry, engagement or beat carries the opponent's blade to that line's side, strong against weak (`layAgainst`); a hit brings the point onto a target (the body leans in if the arm falls short, never past balanced); otherwise blades push each other aside. `src/ik/blades.ts`
 - **Balance**: centre of mass from a segment-mass model; an "off balance" mark appears under a fencer whose centre lies outside the feet (editor only). `src/rig/balance.ts`, `src/scene/BalanceMark.tsx`
 
@@ -39,7 +39,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Export**: captioned picture, PDF handout (two steps per page), video of smooth playback, combination file. `src/export/`
 
 ### Quality
-- 248 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, dragging, actions, blades, playback, links, merging, store); run `npm test`.
+- 254 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, dragging, actions, blades, playback, links, merging, store); run `npm test`.
 - Visual checks are done in a headless browser through a dev-only `window.__editor` hook.
 
 ## Testing with people

@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { GROUP_NAMES, type PresetGroup } from '../presets/builtin.ts';
 import type { ShownPreset } from '../presets/library.ts';
 import { Toggle } from '../ui/Toggle.tsx';
-import { useEditor, type PresetPart } from './store.ts';
+import { poseDial, useEditor, type PresetPart } from './store.ts';
 
 const PART_HINT: Record<PresetPart, string> = {
   all: 'Clicking a pose sets the whole body.',
   upper: 'Clicking a pose sets only the arms, torso and head; the legs stay as they are.',
   lower: 'Clicking a pose sets only the hips and legs; the arms and torso stay as they are.',
+  arm: 'Clicking a pose sets only the weapon arm; everything else stays as it is.',
 };
 
 function groupOf(p: ShownPreset): PresetGroup {
@@ -17,6 +18,14 @@ function groupOf(p: ShownPreset): PresetGroup {
 /** Built-in and saved poses. Each has a ⋯ menu to replace it with the current pose, rename or delete it. */
 export function PresetsPanel() {
   const { presets, presetPart, setPresetPart, applyPreset, active } = useEditor();
+  const steps = useEditor((s) => s.combination.steps);
+  const stepIndex = useEditor((s) => s.stepIndex);
+  const applyStepPose = useEditor((s) => s.applyStepPose);
+  const setPoseAmount = useEditor((s) => s.setPoseAmount);
+  // The pose last clicked, while it can still be dialled back (two plain values, so nothing re-renders needlessly).
+  const dialName = useEditor((s) => poseDial(s)?.name ?? null);
+  const dialAmount = useEditor((s) => poseDial(s)?.amount ?? 1);
+  const dial = dialName === null ? null : { name: dialName, amount: dialAmount };
   const [menu, setMenu] = useState<string | null>(null);
   const [naming, setNaming] = useState<string | null>(null);
 
@@ -31,10 +40,29 @@ export function PresetsPanel() {
           ['all', 'Whole body'],
           ['upper', 'Arms & torso'],
           ['lower', 'Legs'],
+          ['arm', 'Weapon arm'],
         ]}
         onChange={setPresetPart}
       />
       <p className="hint small">{PART_HINT[presetPart]}</p>
+
+      {/* Always here, so the poses below do not jump when one is clicked. */}
+      <label className="dof" title="Click a pose, then set how far it goes: halfway to a lunge, say">
+        <span className="dof-head">
+          <span>{dial ? dial.name : 'How far the pose goes'}</span>
+          <output>{dial ? `${Math.round(dial.amount * 100)}%` : '–'}</output>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          aria-label={dial ? `How far ${dial.name} goes` : 'How far the pose goes: click a pose first'}
+          disabled={!dial}
+          value={dial ? Math.round(dial.amount * 100) : 100}
+          onChange={(e) => setPoseAmount(Number(e.target.value) / 100)}
+        />
+      </label>
 
       {(Object.keys(GROUP_NAMES) as PresetGroup[]).map((group) => {
         const inGroup = presets.filter((p) => groupOf(p) === group);
@@ -56,6 +84,21 @@ export function PresetsPanel() {
           </div>
         );
       })}
+
+      {steps.length > 1 && (
+        <div className="preset-group">
+          <h4>{active}’s pose from another step</h4>
+          <div className="buttons">
+            {steps.map((step, i) =>
+              i === stepIndex ? null : (
+                <button key={step.id} className="small" title={step.label ? `Step ${i + 1}: ${step.label}` : `Step ${i + 1}`} onClick={() => applyStepPose(i)}>
+                  {i + 1}
+                </button>
+              ),
+            )}
+          </div>
+        </div>
+      )}
 
       {naming === null ? (
         <button className="quiet" onClick={() => setNaming('')}>

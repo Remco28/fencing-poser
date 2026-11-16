@@ -32,22 +32,24 @@ export function presetPoseFrom(pose: Pose, handedness: Handedness): Pose {
 
 const UPPER: JointName[] = ['abdomen', 'chest', 'neck', 'shoulder_r', 'elbow_r', 'wrist_r', 'shoulder_l', 'elbow_l', 'wrist_l', 'grip'];
 
+/** What of a pose is applied: all of it, the upper body, the legs and hips, or the weapon arm alone. */
+export type PosePart = 'all' | 'upper' | 'lower' | 'arm';
+
 /**
  * The pose a preset gives this fencer, keeping where they stand. `part` takes
- * only the upper body (spine, head, arms, grip) or only the legs and hips
- * from the preset, keeping the rest of the current pose.
+ * only the upper body (spine, head, arms, grip), only the legs and hips, or
+ * only the weapon arm (and grip) from the preset, keeping the rest of the
+ * current pose.
  */
-export function poseFromPreset(
-  preset: PresetPose,
-  handedness: Handedness,
-  current: Pose,
-  part: 'all' | 'upper' | 'lower' = 'all',
-): Pose {
+export function poseFromPreset(preset: PresetPose, handedness: Handedness, current: Pose, part: PosePart = 'all'): Pose {
   const shaped = handedness === 'left' ? mirrorPose(preset.pose) : preset.pose;
   if (part === 'all') return { joints: shaped.joints, root: { ...current.root, lift: shaped.root.lift } };
+  const w = handedness === 'right' ? 'r' : 'l';
+  const weaponArm: JointName[] = [`shoulder_${w}`, `elbow_${w}`, `wrist_${w}`, 'grip'];
+  const taken = (name: JointName) => (part === 'arm' ? weaponArm.includes(name) : UPPER.includes(name) === (part === 'upper'));
   const joints = { ...current.joints };
   for (const name of JOINT_NAMES) {
-    if (UPPER.includes(name) !== (part === 'upper')) continue;
+    if (!taken(name)) continue;
     if (shaped.joints[name]) joints[name] = shaped.joints[name];
     else delete joints[name];
   }

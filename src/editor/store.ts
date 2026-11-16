@@ -40,6 +40,7 @@ import {
 } from '../model/combination.ts';
 import { clampDof, JOINT_BY_NAME, JOINTS, oppositeJoint, type JointName } from '../model/joints.ts';
 import { mirrorPose } from '../model/mirror.ts';
+import { tweenPose } from '../model/tween.ts';
 import { angle, type FencerSetup, type Pose } from '../model/types.ts';
 import type { PresetPose } from '../presets/builtin.ts';
 import { advance, keyAt } from '../viewer/player.ts';
@@ -47,9 +48,9 @@ import { pushBlades } from '../ik/blades.ts';
 import { actionLabel, applyAction, shapePath, type Action, type HitWith, type PathShape } from '../actions/actions.ts';
 import { DEFAULT_KEEP, keepInPlace, type Keep } from '../ik/drag.ts';
 import type { SketchView } from '../sketch/project.ts';
-import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type ShownPreset } from '../presets/library.ts';
+import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type PosePart, type ShownPreset } from '../presets/library.ts';
 
-export type PresetPart = 'all' | 'upper' | 'lower';
+export type PresetPart = PosePart;
 
 /** The flat stick-figure strip under the 3D view. */
 export interface SketchState {
@@ -184,6 +185,20 @@ interface EditorState extends Snapshot {
   presetPart: PresetPart;
   setPresetPart: (part: PresetPart) => void;
   /**
+   * The last pose click, kept so it can be dialled back ("halfway to a
+   * lunge"). It holds only while both fencers are exactly as that click (or
+   * the dial) left them; see `poseDial`.
+   */
+  dial: Dial | null;
+  /** How far the last pose click is applied: 0 = the pose before it, 1 = all of it. One undo step with the click. */
+  setPoseAmount: (amount: number) => void;
+  /**
+   * Give the posing fencer the pose a fencer had in another step (their own
+   * unless `from` names the other, whose pose is mirrored as needed). Like
+   * any pose: the part chosen, where they stand kept, and it can be dialled.
+   */
+  applyStepPose: (stepIndex: number, from?: FencerId) => void;
+  /**
    * The view the coach is working in: wherever the camera was last left.
    * Editor state only. What students see for a step (its "shot",
    * `step.camera`) is set on purpose with `setShot`, never by looking around.
@@ -239,6 +254,28 @@ interface EditorState extends Snapshot {
 }
 
 const HISTORY_LIMIT = 200;
+
+/** A pose click that can still be dialled back. */
+interface Dial {
+  id: number;
+  name: string;
+  /** Both fencers before the click, and the posing fencer's pose with all of it applied. */
+  before: Record<FencerId, Pose>;
+  to: Pose;
+  /** Both fencers as the click or the dial last left them. */
+  now: Record<FencerId, Pose>;
+  amount: number;
+}
+
+let dials = 0;
+
+/** The pose that can be dialled now: its name and how far it is applied (0 to 1); null once anything else has moved a fencer. */
+export function poseDial(s: Pick<EditorState, 'dial' | 'combination' | 'stepIndex'>): { name: string; amount: number } | null {
+  const d = s.dial;
+  const poses = s.combination.steps[s.stepIndex]?.poses;
+  if (!d || !poses || poses.A !== d.now.A || poses.B !== d.now.B) return null;
+  return { name: d.name, amount: d.amount };
+}
 
 /** A step label written by an action: "A: Beat 6". */
 const AUTO_LABEL = /^[AB]: /;
@@ -615,15 +652,41 @@ export const useEditor = create<EditorState>((set, get) => {
         delete joints[joint];
         return edit(s, { combination: withPose(s, { ...activePose(s), joints }) });
       }),
-    applyPreset: (preset, part = get().presetPart) =>
-      set((s) =>
-        edit(
-          s,
-          { combination: moved(s, poseFromPreset(preset, activeSetup(s).handedness, activePose(s), part)) },
-          undefined,
-          `Step ${s.stepIndex + 1} · ${s.active}: ${preset.name}`,
-        ),
-      ),
+    applyPreset: (preset, part = get().presetPart) => {
+      const s = get();
+      const before = currentStep(s).poses;
+      const to = poseFromPreset(preset, activeSetup(s).handedness, activePose(s), part);
+      const id = ++dials;
+      // The click and any dialling after it are one undo step.
+      set(edit(s, { combination: moved(s, to) }, `drag.pose.${id}`, `Step ${s.stepIndex + 1} · ${s.active}: ${preset.name}`));
+      set({ dial: { id, name: preset.name, before, to, now: currentStep(get()).poses, amount: 1 } });
+    },
+    dial: null,
+    setPoseAmount: (amount) => {
+      const s = get();
+      const d = s.dial;
+      if (!d || !poseDial(s)) return;
+      const k = Math.min(1, Math.max(0, amount));
+      const f = s.active;
+      // Always worked out from the poses before the click, so dialling back and forth leaves no trace.
+      const pose = k >= 1 ? d.to : k <= 0 ? d.before[f] : tweenPose(d.before[f], d.to, k);
+      const poses = k <= 0 ? d.before : pushBlades(s.combination, d.before, { ...d.before, [f]: pose }, f);
+      const label = `Step ${s.stepIndex + 1} · ${f}: ${d.name}${k < 1 ? ` ${Math.round(k * 100)}%` : ''}`;
+      set(edit(s, { combination: withStep(s, (st) => ({ ...st, poses })) }, `drag.pose.${d.id}`, label));
+      set({ dial: { ...d, now: currentStep(get()).poses, amount: k } });
+    },
+    applyStepPose: (stepIndex, from) => {
+      const s = get();
+      const source = s.combination.steps[stepIndex];
+      const who = from ?? s.active;
+      if (!source || (stepIndex === s.stepIndex && who === s.active)) return;
+      s.applyPreset({
+        id: `step-${source.id}-${who}`,
+        name: `${who === s.active ? 'Pose' : `${who}’s pose`} from step ${stepIndex + 1}`,
+        builtIn: false,
+        pose: presetPoseFrom(source.poses[who], s.combination.fencers[who].handedness),
+      });
+    },
     applyPresetToOther: (preset) =>
       set((s) => {
         const f: FencerId = s.active === 'A' ? 'B' : 'A';
