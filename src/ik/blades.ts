@@ -1,4 +1,4 @@
-import { Matrix4, Vector3 } from 'three';
+import { Line3, Matrix4, Vector3 } from 'three';
 import { HEADING, type Combination, type FencerId, type TargetArea } from '../model/combination.ts';
 import { clampDof } from '../model/joints.ts';
 import type { Pose } from '../model/types.ts';
@@ -50,7 +50,7 @@ export function closestBetween(p1: Vector3, q1: Vector3, p2: Vector3, q2: Vector
 const weaponWrist = (c: Combination, f: FencerId) => (c.fencers[f].handedness === 'right' ? 'wrist_r' : 'wrist_l');
 
 /** Turn a fencer's blade about their wrist so the point on it at `along` (0–1) moves to `to`. */
-function swingBlade(c: Combination, poses: Poses, f: FencerId, along: number, to: Vector3): Pose {
+export function swingBlade(c: Combination, poses: Poses, f: FencerId, along: number, to: Vector3): Pose {
   const r = rig(c, poses, f);
   const wrist = jointPosition(r, weaponWrist(c, f));
   // The blade runs (nearly) through the wrist, so pointing it from the wrist
@@ -87,27 +87,83 @@ export function pushBlades(c: Combination, before: Poses, after: Poses, mover: F
 }
 
 /** Which way is a fencer's outside (their weapon-hand side), horizontally. */
-function outside(c: Combination, f: FencerId): Vector3 {
+export function outsideOf(c: Combination, f: FencerId): Vector3 {
   const right = new Vector3(0, 0, 1).applyMatrix4(new Matrix4().makeRotationY((HEADING[f] * Math.PI) / 180));
   return c.fencers[f].handedness === 'right' ? right : right.negate();
 }
 
 /**
- * Engage the blades: `mover` lays their blade against the opponent's, on the
- * mover's outside (sixte) or inside (quarte), around the middle of the
- * opponent's blade.
+ * Lay `yielder`'s blade against `holder`'s, which stays as it is: the
+ * yielder's blade ends up touching the holder's on the `side` given (a
+ * horizontal direction: the yielder's blade lies that way from the holder's
+ * where they touch). The wrist does it if it can; otherwise the hand may
+ * move a little as well (`handMay`, metres). `prefer` says where on the
+ * holder's blade they should meet: its forte (near the guard, as in a parry:
+ * strong against weak) or its foible (near the point, as when it is beaten).
+ *
+ * Returns null when the blades cannot be brought together: too far apart,
+ * or only by twisting the yielder's arm out of all recognition (a low parry
+ * chosen against a high attack simply does not find the blade).
  */
-export function engage(c: Combination, poses: Poses, mover: FencerId, line: 'sixte' | 'quarte'): Poses {
-  const opp = rig(c, poses, other(mover));
-  const contact = opp.guard.clone().lerp(opp.tip, 0.62);
-  const side = outside(c, mover).multiplyScalar(line === 'sixte' ? 1 : -1);
-  const through = contact.addScaledVector(side, CONTACT);
-  const r = rig(c, poses, mover);
-  const wrist = jointPosition(r, weaponWrist(c, mover));
-  // Aim so the blade passes through the contact point, at full length.
-  const tipTarget = wrist.clone().addScaledVector(through.sub(wrist).normalize(), r.tip.distanceTo(wrist));
-  const pose = aim(poses[mover], (p) => solveRig(c.fencers[mover], p, HEADING[mover]), c.fencers[mover], tipTarget);
-  return { ...poses, [mover]: pose };
+export function layAgainst(
+  c: Combination,
+  poses: Poses,
+  holder: FencerId,
+  side: Vector3,
+  prefer: 'forte' | 'foible',
+  /** Only meet within this much of the holder's blade, from the guard (0) to the point (1). */
+  within = 0.9,
+  handMay = 0.08,
+): Poses | null {
+  const yielder = other(holder);
+  const h = rig(c, poses, holder);
+  const setup = c.fencers[yielder];
+  const build = (p: Pose) => solveRig(setup, p, HEADING[yielder]);
+  const wristName = weaponWrist(c, yielder);
+  const armSide = wristName === 'wrist_r' ? 'r' : 'l';
+  const from = poses[yielder];
+  const start = build(from);
+  const wrist0 = jointPosition(start, wristName);
+  const length = start.tip.distanceTo(wrist0);
+  const offset = side.clone().setLength(CONTACT);
+
+  /** How far the yielder's blade is from passing through `through`, and where on it that is. */
+  const missOf = (p: Pose, through: Vector3) => {
+    const r = build(p);
+    const on = new Line3(r.guard, r.tip).closestPointToPoint(through, true, new Vector3());
+    return { miss: on.distanceTo(through), on, wrist: jointPosition(r, wristName) };
+  };
+  const aimThrough = (p: Pose, through: Vector3) => {
+    const wrist = jointPosition(build(p), wristName);
+    return aim(p, build, setup, wrist.clone().addScaledVector(through.clone().sub(wrist).normalize(), length));
+  };
+
+  // Places along the holder's blade, the preferred end first. The first one
+  // the wrist alone can manage wins; failing that, the nearest miss.
+  const places = Array.from({ length: 16 }, (_, i) => 0.15 + i * 0.05).filter((p) => p <= within + 1e-9);
+  if (prefer === 'foible') places.reverse();
+  let best: { pose: Pose; miss: number; through: Vector3 } | null = null;
+  for (const along of places) {
+    const through = h.guard.clone().lerp(h.tip, along).add(offset);
+    if (through.distanceTo(wrist0) > length * 0.97) continue;
+    const pose = aimThrough(from, through);
+    const { miss } = missOf(pose, through);
+    if (!best || miss < best.miss) best = { pose, miss, through };
+    if (miss < 0.004) break;
+  }
+  if (!best) return null;
+
+  // The wrist alone could not: carry the hand across by what is missing, a little.
+  for (let i = 0; i < 3 && best.miss >= 0.004; i++) {
+    const { on, wrist } = missOf(best.pose, best.through);
+    const goal = wrist.clone().add(best.through.clone().sub(on));
+    if (goal.distanceTo(wrist0) > handMay) goal.sub(wrist0).setLength(handMay).add(wrist0);
+    const pose = aimThrough(reach(best.pose, build, 'arm', armSide, goal), best.through);
+    const { miss } = missOf(pose, best.through);
+    if (miss >= best.miss) break;
+    best = { pose, miss, through: best.through };
+  }
+  return best.miss < 0.015 ? { ...poses, [yielder]: best.pose } : null;
 }
 
 /** A point on the surface of a target area, on the side facing `from`. */

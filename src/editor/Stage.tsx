@@ -274,26 +274,43 @@ export function Stage() {
             One view for all steps
           </Switch>
         </div>
-        <div className="tool-group" role="toolbar" aria-label="Show">
-          <span className="group-label">Show</span>
-          <Switch on={!!display.distance} onToggle={() => s.setDisplay({ distance: !display.distance })} disabled={playing} title="Distances for this step">
-            Distance
-          </Switch>
-          <Switch
-            on={!!display.ghost}
-            onToggle={() => s.setDisplay({ ghost: !display.ghost })}
-            disabled={!previous && !display.ghost}
-            title={
-              s.stepIndex > 0
-                ? 'Show the previous step faintly, and the path of each point since then'
-                : 'The first step has nothing before it'
-            }
-          >
-            Ghost
-          </Switch>
-          <Switch on={s.showLabels} onToggle={s.toggleLabels} title="The A and B tags above the fencers">
-            Labels
-          </Switch>
+        <div className="tool-row">
+          <div className="tool-group" role="toolbar" aria-label="Show">
+            <span className="group-label">Show</span>
+            <Switch on={!!display.distance} onToggle={() => s.setDisplay({ distance: !display.distance })} disabled={playing} title="Distances for this step">
+              Distance
+            </Switch>
+            <Switch
+              on={!!display.ghost}
+              onToggle={() => s.setDisplay({ ghost: !display.ghost })}
+              disabled={!previous && !display.ghost}
+              title={
+                s.stepIndex > 0
+                  ? 'Show the previous step faintly, and the path of each point since then'
+                  : 'The first step has nothing before it'
+              }
+            >
+              Ghost
+            </Switch>
+            <Switch on={s.showLabels} onToggle={s.toggleLabels} title="The A and B tags above the fencers">
+              Labels
+            </Switch>
+            <Switch on={s.sketch.open} onToggle={s.toggleSketch} title="A flat stick-figure drawing under the view, where every joint can be dragged (K)">
+              Sketch
+            </Switch>
+          </div>
+          <div className="tool-group" role="toolbar" aria-label="Keep in place">
+            <span className="group-label">Keep in place</span>
+            <Switch on={s.keep.feet} onToggle={() => s.toggleKeep('feet')} title="Both feet stay where they are while you move anything else">
+              Feet
+            </Switch>
+            <Switch on={s.keep.hand} onToggle={() => s.toggleKeep('hand')} title="The weapon hand stays where it is while you move anything else">
+              Hand
+            </Switch>
+            <Switch on={s.keep.point} onToggle={() => s.toggleKeep('point')} title="The épée point stays where it is while you move anything else">
+              Point
+            </Switch>
+          </div>
         </div>
       </div>
 

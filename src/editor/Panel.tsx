@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { FENCERS, TARGET_NAMES, type FencerId, type TargetArea } from '../model/combination.ts';
-import { formatDistance, formatHeight } from '../model/units.ts';
+import { formatHeight } from '../model/units.ts';
 import { Toggle } from '../ui/Toggle.tsx';
 import { STEP } from './keyboard.ts';
+import { ActionsPanel } from './ActionsPanel.tsx';
 import { HistoryList } from './HistoryList.tsx';
 import { PresetsPanel } from './PresetsPanel.tsx';
 import { currentStep, useEditor } from './store.ts';
@@ -110,63 +111,17 @@ export function Panel(props: { onOpenLibrary: () => void; onShare: () => void; o
 function PoseTab() {
   return (
     <>
-      <section>
+      <ActionsPanel>
         <p className="hint">
-          Drag a handle (<span className="dot hand" /> hand, <span className="dot point" /> point, <span className="dot foot" />{' '}
-          foot, <span className="dot hips" /> hips), or click a body part (or press <kbd>Tab</kbd>) and use the controls
-          beside it. Click the hips to step along the piste.
+          Drag the dots (<span className="dot hand" /> hand, <span className="dot point" /> point, <span className="dot foot" /> foot,{' '}
+          <span className="dot hips" /> hips) on the figure or in the sketch; click a part or a dot for its controls. Actions and
+          poses below.
         </p>
+      </ActionsPanel>
+      <section>
         <PresetsPanel />
       </section>
-      <BladesSection />
     </>
-  );
-}
-
-function BladesSection() {
-  const s = useEditor();
-  const [message, setMessage] = useState('');
-  const opp = s.active === 'A' ? 'B' : 'A';
-  return (
-    <section>
-      <h2>Blades</h2>
-      <div className="blade-row">
-        <span>{s.active} engages</span>
-        <div className="buttons">
-          <button className="small" onClick={() => s.engageBlades('sixte')} title={`${s.active} lays the blade on ${opp}'s, closing ${s.active}'s outside line`}>
-            in sixte
-          </button>
-          <button className="small" onClick={() => s.engageBlades('quarte')} title={`${s.active} lays the blade on ${opp}'s, closing ${s.active}'s inside line`}>
-            in quarte
-          </button>
-        </div>
-      </div>
-      <div className="blade-row">
-        <span>
-          {s.active} touches {opp} on
-        </span>
-        <div className="buttons">
-          {(Object.keys(TARGET_NAMES) as TargetArea[]).map((area) => (
-            <button
-              key={area}
-              className="small"
-              onClick={() => {
-                const short = s.touchTarget(area);
-                setMessage(
-                  short
-                    ? `${s.active}’s point is ${formatDistance(short, s.units)} short of ${opp}’s ${TARGET_NAMES[area].toLowerCase()}: step in or lunge first.`
-                    : '',
-                );
-              }}
-            >
-              {TARGET_NAMES[area]}
-            </button>
-          ))}
-        </div>
-      </div>
-      {message && <p className="message">{message}</p>}
-      <p className="hint small">When one blade is moved into the other, the other is pushed aside rather than passing through.</p>
-    </section>
   );
 }
 
@@ -355,6 +310,8 @@ function HelpTab({ onTour }: { onTour: () => void }) {
           <dd>Undo / redo</dd>
           <dt>H</dt>
           <dd>Show / hide drag handles</dd>
+          <dt>K</dt>
+          <dd>Show / hide the sketch under the view</dd>
           <dt>Z / Shift+Z</dt>
           <dd>Zoom to both fencers / to the one you are posing</dd>
           <dt>L</dt>

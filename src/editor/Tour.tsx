@@ -4,8 +4,8 @@ const KEY = 'fencing-poser.toured';
 
 const CARDS: { title: string; body: string }[] = [
   {
-    title: 'Pose by dragging',
-    body: 'Grab a coloured handle and drag: orange for a hand, red for the point, blue for a foot, purple for the hips. The rest of the body follows.',
+    title: 'Sketch the pose',
+    body: 'Under the 3D view is a flat stick-figure sketch of the same two fencers. Drag any dot (a hand, a foot, a knee, the hips, the point) and the body follows; the feet stay planted. The marker under a fencer slides them along the piste. The same dots work on the 3D figure.',
   },
   {
     title: 'Or click a body part',
@@ -13,7 +13,7 @@ const CARDS: { title: string; body: string }[] = [
   },
   {
     title: 'Build the combination',
-    body: '+ New step starts from the current pose. Give each step a label in the Step tab. Press Play (or Space) to watch it move, or drag the timeline. Click the arrow between two steps to bend a point’s path, say under the opponent’s blade.',
+    body: 'Most steps are one click: under Actions, pick a distance, footwork, a parry or a hit, and the fencer does it. Turn on “New step for each action” and each click adds a step, named for you. Press Play (or Space) to watch it move. “Path in” sends a point under or over the opponent’s blade.',
   },
   {
     title: 'Share it',

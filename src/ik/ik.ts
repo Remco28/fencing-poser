@@ -21,13 +21,13 @@ const CHAIN = {
   leg: { root: 'hip', mid: 'knee', end: 'ankle', upper: 'thigh', lower: 'shank', bend: -1 },
 } as const;
 
-function worldQ(m: Matrix4): Quaternion {
+export function worldQ(m: Matrix4): Quaternion {
   const q = new Quaternion();
   m.decompose(new Vector3(), q, new Vector3());
   return q;
 }
 
-function worldP(m: Matrix4): Vector3 {
+export function worldP(m: Matrix4): Vector3 {
   return new Vector3().setFromMatrixPosition(m);
 }
 
@@ -47,9 +47,10 @@ function setJoint(pose: Pose, joint: JointName, angles: JointAngles): Pose {
 /**
  * Bend a limb so its hand or foot reaches `target` (world space). `pole` is
  * the direction the elbow or knee should point; by default it keeps pointing
- * where it does now.
+ * where it does now. The hand or foot keeps facing the way it does now, or
+ * `facing` (a world orientation) when given.
  */
-export function reach(pose: Pose, build: Build, limb: Limb, side: Side, target: Vector3, pole?: Vector3): Pose {
+export function reach(pose: Pose, build: Build, limb: Limb, side: Side, target: Vector3, pole?: Vector3, facing?: Quaternion): Pose {
   const c = CHAIN[limb];
   const root = `${c.root}_${side}` as JointName;
   const mid = `${c.mid}_${side}` as JointName;
@@ -60,7 +61,10 @@ export function reach(pose: Pose, build: Build, limb: Limb, side: Side, target: 
   const L2 = rig.layout[c.lower];
 
   const toTarget = target.clone().sub(a);
-  const dist = Math.min(Math.max(toTarget.length(), Math.abs(L1 - L2) + 1e-4), L1 + L2 - 1e-4);
+  // The elbow or knee bends only so far, which keeps the end that far from the root at least.
+  const maxBend = JOINT_BY_NAME[`${c.mid}_${side}` as JointName].dofs[0].max * DEG;
+  const nearest = Math.sqrt(L1 * L1 + L2 * L2 + 2 * L1 * L2 * Math.cos(maxBend));
+  const dist = Math.min(Math.max(toTarget.length(), Math.abs(L1 - L2) + 1e-4, nearest + 1e-4), L1 + L2 - 1e-4);
   const dir = toTarget.normalize();
   const t = a.clone().addScaledVector(dir, dist);
 
@@ -90,9 +94,19 @@ export function reach(pose: Pose, build: Build, limb: Limb, side: Side, target: 
   next = setJoint(next, mid, { flex: clampDof(mid, 'flex', Math.acos(Math.min(1, Math.max(-1, upper.dot(lower)))) / DEG) });
 
   // Keep the hand or foot facing the way it did.
-  const endWorld = worldQ(rig.world[end]);
+  const endWorld = facing ? facing.clone() : worldQ(rig.world[end]);
   const midWorld = worldQ(build(next).world[mid]);
-  return setJoint(next, end, anglesFor(end, midWorld.invert().multiply(endWorld)));
+  const local = midWorld.invert().multiply(endWorld);
+  if (limb === 'leg') {
+    // The ankle cannot twist, so a foot cannot always face exactly as it
+    // did; keeping the sole flat matters more (a tilted sole lifts the
+    // fencer), so match the sole's up direction exactly and let the toes
+    // turn with the leg.
+    const up = new Vector3(0, 1, 0).applyQuaternion(local);
+    const flat = new Euler(Math.asin(Math.max(-1, Math.min(1, up.z))), 0, Math.atan2(-up.x, up.y), JOINT_BY_NAME[end].order);
+    return setJoint(next, end, anglesFor(end, new Quaternion().setFromEuler(flat)));
+  }
+  return setJoint(next, end, anglesFor(end, local));
 }
 
 /** Turn the weapon hand so the point aims at `target`. */
@@ -108,21 +122,51 @@ export function aim(pose: Pose, build: Build, setup: FencerSetup, target: Vector
   return setJoint(pose, wrist, anglesFor(wrist, elbow.invert().multiply(hand)));
 }
 
+/** A foot held in place: where the ankle is, which way the foot faces (world), and optionally which way the knee points. */
+export interface FootHold {
+  side: Side;
+  at: Vector3;
+  facing: Quaternion;
+  pole?: Vector3;
+}
+
+/** Where each foot is now, facing as it does, with the knee pointing as it does. */
+export function footHolds(rig: Rig, sides: readonly Side[] = ['r', 'l']): FootHold[] {
+  return sides.map((s) => {
+    const hip = worldP(rig.world[`hip_${s}`]);
+    const at = worldP(rig.world[`ankle_${s}`]);
+    const axis = at.clone().sub(hip).normalize();
+    // The way the knee bends out of the hip-to-ankle line.
+    const pole = worldP(rig.world[`knee_${s}`]).sub(hip);
+    pole.addScaledVector(axis, -pole.dot(axis));
+    return { side: s, at, facing: worldQ(rig.world[`ankle_${s}`]), pole: pole.lengthSq() > 1e-8 ? pole : undefined };
+  });
+}
+
+/**
+ * Hold the pelvis at `pelvisAt` (world) and bend the legs so each held foot
+ * is back where it was, facing as it did. The pelvis does not turn; a leg
+ * that cannot reach stretches toward its foot.
+ */
+export function plantFeet(pose: Pose, setup: FencerSetup, heading: number, pelvisAt: Vector3, feet: readonly FootHold[]): Pose {
+  const held: Build = (p) => solveRig(setup, p, heading, pelvisAt.y);
+  let next: Pose = { ...pose, root: { ...pose.root, x: pelvisAt.x, z: pelvisAt.z } };
+  for (const foot of feet) {
+    const pole = foot.pole ?? new Vector3(1, 0, 0).applyQuaternion(foot.facing);
+    next = reach(next, held, 'leg', foot.side, foot.at, pole, foot.facing);
+  }
+  return next;
+}
+
 /**
  * Move the hips to `target` with both feet staying where they are: the legs
  * bend or straighten to make it so.
  */
 export function moveHips(pose: Pose, setup: FencerSetup, heading: number, target: Vector3): Pose {
   const before = solveRig(setup, pose, heading);
-  const feet = (['r', 'l'] as const).map((s) => ({
-    side: s,
-    at: worldP(before.world[`ankle_${s}`]),
-    forward: new Vector3(1, 0, 0).applyQuaternion(worldQ(before.world[`ankle_${s}`])),
-  }));
-  const held: Build = (p) => solveRig(setup, p, heading, target.y);
-  let next: Pose = { ...pose, root: { ...pose.root, x: target.x, z: target.z } };
-  for (const foot of feet) next = reach(next, held, 'leg', foot.side, foot.at, foot.forward);
-  return next;
+  // The knee points over the toes.
+  const feet = footHolds(before).map((f) => ({ ...f, pole: new Vector3(1, 0, 0).applyQuaternion(f.facing) }));
+  return plantFeet(pose, setup, heading, target, feet);
 }
 
 /** Where each handle sits on the posed fencer. */

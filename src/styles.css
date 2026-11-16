@@ -25,13 +25,32 @@ body,
 
 .app {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  /* minmax: a long step bar scrolls instead of widening the stage past the window. */
+  grid-template-columns: minmax(0, 1fr) 320px;
   height: 100%;
 }
 
 .stage {
   position: relative;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The 3D view over the sketch strip; the step bar sits under both. */
+.stage-views {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Every overlay of the 3D view is placed inside this pane. */
+.view-pane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .panel {
@@ -327,10 +346,9 @@ textarea.wide {
 }
 
 .step-bar {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
+  position: relative;
+  flex: none;
+  margin: 8px 12px 12px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1423,17 +1441,80 @@ button.switch.on .knob {
   opacity: 0.4;
 }
 
-.blade-row {
-  display: grid;
-  grid-template-columns: 92px 1fr;
-  align-items: baseline;
-  gap: 6px;
-  margin-bottom: 6px;
-  font-size: 13px;
+/* Actions (Pose tab): compact rows of small buttons, a short label at the left. */
+.actions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
-.blade-row > span {
+.actions-head h2 {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.actions-head .switch {
+  font-size: 12px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 5px;
+}
+
+.action-row > span {
+  font-size: 12px;
+  line-height: 1.2;
   color: var(--muted);
+}
+
+.action-row .buttons {
+  gap: 4px;
+}
+
+.action-row button.small {
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.action-row button.small.num {
+  min-width: 25px;
+  padding: 3px 4px;
+}
+
+.action-row button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.hit-with {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hit-with .toggle {
+  margin: 0;
+}
+
+.action-row .toggle button {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+.actions .message {
+  font-size: 12px;
+  margin: 2px 0 6px;
 }
 
 .hud-value {
@@ -1534,7 +1615,7 @@ button.switch.on .knob {
 .path-banner {
   position: absolute;
   left: 16px;
-  bottom: 112px;
+  bottom: 16px;
   z-index: 6;
   display: flex;
   gap: 8px;
@@ -1588,7 +1669,7 @@ button.switch.on .knob {
 .stage-stop {
   position: absolute;
   left: 50%;
-  bottom: 112px;
+  bottom: 16px;
   transform: translateX(-50%);
   z-index: 6;
   padding: 10px 22px;
@@ -1604,7 +1685,7 @@ button.switch.on .knob {
 .camera-hint {
   position: absolute;
   right: 16px;
-  bottom: 112px;
+  bottom: 16px;
   margin: 0;
   padding: 3px 8px;
   border-radius: 6px;
@@ -1658,7 +1739,7 @@ button.switch.on .knob {
 .shape-prompt {
   position: absolute;
   left: 16px;
-  bottom: 112px;
+  bottom: 16px;
   z-index: 5;
   background: #fff;
   border: 1px solid #f0b8bf;
@@ -1789,4 +1870,276 @@ button.switch.on .knob {
 .viewer-top-tools button[aria-pressed='true'] {
   background: #fde9df;
   border-color: var(--accent);
+}
+
+/* ---- sketch strip: the same fencers as flat stick figures ---- */
+
+.sketch-divider {
+  flex: none;
+  height: 9px;
+  margin-top: -1px;
+  cursor: row-resize;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  position: relative;
+  touch-action: none;
+}
+
+.sketch-divider::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 36px;
+  height: 1px;
+  margin-left: -18px;
+  border-top: 1px solid #b9c0c7;
+  border-bottom: 1px solid #b9c0c7;
+  height: 1px;
+}
+
+.sketch-divider:hover {
+  background: var(--control);
+}
+
+.sketch-pane {
+  flex: none;
+  position: relative;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.sketch {
+  --sk-strong: #2c3238;
+  --sk-light: #a0a8b1;
+  --sk-body: #4d555d;
+  --sk-other-strong: #7d858e;
+  --sk-other-light: #c9ced3;
+  --sk-other-body: #959ca4;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.sketch-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: default;
+  touch-action: none;
+  user-select: none;
+  font-family: inherit;
+}
+
+.sketch.dragging .sketch-svg,
+.sketch.dragging .sketch-svg * {
+  cursor: grabbing;
+}
+
+.sketch-svg line {
+  stroke-linecap: round;
+  fill: none;
+}
+
+.sk-floor line {
+  stroke: #b9c0c7;
+  stroke-width: 1.5;
+}
+
+.sk-floor .tick {
+  stroke: #9aa2ab;
+}
+
+.sk-piste rect {
+  fill: #eef0f2;
+  stroke: #b9c0c7;
+  stroke-width: 1;
+}
+
+.sk-piste line {
+  stroke: #fff;
+  stroke-width: 2.5;
+}
+
+.sk-body,
+.sk-strong,
+.sk-light {
+  stroke-width: 3.2;
+}
+
+.sk-body {
+  stroke: var(--sk-body);
+}
+
+.sk-strong {
+  stroke: var(--sk-strong);
+}
+
+.sk-light {
+  stroke: var(--sk-light);
+}
+
+.sk-blade,
+.sk-guard {
+  stroke: var(--sk-strong);
+  stroke-width: 1.4;
+}
+
+.sk-guard {
+  stroke-width: 2.4;
+}
+
+.sk-head {
+  fill: var(--panel);
+  stroke: var(--sk-body);
+  stroke-width: 2.4;
+}
+
+.sk-body.other,
+.sk-head.other {
+  stroke: var(--sk-other-body);
+}
+
+.sk-strong.other,
+.sk-blade.other,
+.sk-guard.other {
+  stroke: var(--sk-other-strong);
+}
+
+.sk-light.other {
+  stroke: var(--sk-other-light);
+}
+
+.sk-dot {
+  cursor: grab;
+}
+
+.sk-dot .hit {
+  fill: transparent;
+}
+
+.sk-dot .fill {
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.sk-dot .kept {
+  fill: none;
+  stroke-width: 1.6;
+}
+
+.sk-dot .selected {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.6;
+  stroke-dasharray: 2.5 2;
+}
+
+.sk-dots.other .fill {
+  opacity: 0.6;
+}
+
+.sk-dots.other .kept {
+  opacity: 0.45;
+}
+
+/* From behind, only the opponent's blade is drawn, with its point marked. */
+.sk-their-point {
+  fill: var(--panel);
+  stroke: #d0263a;
+  stroke-width: 1.6;
+  pointer-events: none;
+}
+
+.sk-dots.off,
+.sk-marker.off {
+  pointer-events: none;
+}
+
+.sk-dots.off .fill {
+  opacity: 0.35;
+}
+
+.sk-marker {
+  cursor: grab;
+}
+
+.sk-marker rect {
+  fill: transparent;
+}
+
+.sk-marker path {
+  fill: #8a929b;
+}
+
+.sk-marker.other path {
+  fill: #b9c0c7;
+}
+
+.sk-marker.hover path {
+  fill: var(--ink);
+}
+
+.sk-marker.off path {
+  opacity: 0.4;
+}
+
+.sk-gap line {
+  stroke: #b9c0c7;
+  stroke-width: 1;
+}
+
+.sk-gap text {
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  fill: var(--muted);
+  font-size: 11px;
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.sk-gap.on line {
+  stroke: var(--ink);
+}
+
+.sk-gap.on text {
+  fill: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sketch-tools {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: #ffffffe6;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.sketch-tools .toggle {
+  margin: 0;
+}
+
+.sketch-tools button {
+  font-size: 13px;
+  padding: 4px 9px;
+}
+
+/* Show and Keep in place share a row when there is room. */
+.tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.tool-row .tool-group + .tool-group .group-label {
+  width: auto;
 }

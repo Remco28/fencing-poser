@@ -210,3 +210,98 @@ describe('history list', () => {
     expect(state().future).toHaveLength(0);
   });
 });
+
+describe('actions', () => {
+  const labels = () => state().combination.steps.map((s) => s.label);
+  const newStepMode = (on: boolean) => {
+    if (state().actionsNewStep !== on) state().toggleActionsNewStep();
+  };
+  beforeEach(() => newStepMode(false));
+
+  it('is one undo step, named in the history list', () => {
+    const before = currentStep(state()).poses;
+    state().act({ kind: 'footwork', move: 'lunge' });
+    expect(currentStep(state()).poses).not.toEqual(before);
+    expect(state().change.label).toBe('Step 1 · A: Lunge');
+    state().undo();
+    expect(currentStep(state()).poses).toEqual(before);
+    expect(state().past).toHaveLength(0);
+  });
+
+  it('adds exactly one step in new-step mode, acts there, and undoes in one', () => {
+    newStepMode(true);
+    const first = currentStep(state()).poses;
+    state().act({ kind: 'footwork', move: 'advance' });
+    expect(state().combination.steps).toHaveLength(2);
+    expect(state().stepIndex).toBe(1);
+    expect(state().combination.steps[0].poses).toEqual(first);
+    expect(pose().root.x).not.toBe(first.A.root.x);
+    expect(labels()).toEqual(['En garde', 'A: Advance']);
+    state().undo();
+    expect(state().combination.steps).toHaveLength(1);
+    expect(state().stepIndex).toBe(0);
+    newStepMode(false);
+  });
+
+  it('sets an empty label, appends to automatic ones, and leaves a typed one alone', () => {
+    state().addStep();
+    state().act({ kind: 'footwork', move: 'lunge' });
+    expect(labels()[1]).toBe('A: Lunge');
+    state().setActive('B');
+    state().act({ kind: 'parry', number: 4 });
+    expect(labels()[1]).toBe('A: Lunge · B: Parry 4');
+    state().setStepText({ label: 'Counter-attack' });
+    state().act({ kind: 'extend' });
+    expect(labels()[1]).toBe('Counter-attack');
+  });
+
+  it('highlights the target hit on the opponent, once', () => {
+    state().act({ kind: 'distance', measure: 'short' });
+    expect(state().act({ kind: 'hit', area: 'body', with: 'arm' }).short).toBe(0);
+    state().act({ kind: 'hit', area: 'body', with: 'arm' });
+    expect(currentStep(state()).display?.targets).toEqual([{ fencer: 'B', area: 'body' }]);
+  });
+
+  it('engages the blades', () => {
+    state().act({ kind: 'distance', measure: 'short' });
+    const a = currentStep(state()).poses.A;
+    state().act({ kind: 'engage', line: 'sixte' });
+    expect(state().change.label).toBe('Step 1 · A: Engage 6');
+    expect(currentStep(state()).poses.A.joints).not.toEqual(a.joints);
+  });
+
+  it('does nothing when the blades are too far apart to beat or engage, even in new-step mode', () => {
+    state().toggleActionsNewStep();
+    const before = state().combination;
+    expect(state().act({ kind: 'beat', line: 'quarte' })).toEqual({ short: 0, close: false, apart: true });
+    expect(state().combination).toBe(before);
+    expect(state().past).toHaveLength(0);
+  });
+
+  it('reports how far short a hit falls, without highlighting it', () => {
+    const { short } = state().act({ kind: 'hit', area: 'body', with: 'arm' });
+    expect(short).toBeGreaterThan(0);
+    expect(currentStep(state()).display?.targets ?? []).toEqual([]);
+  });
+
+  it('never adds a step or a label for a distance', () => {
+    newStepMode(true);
+    state().act({ kind: 'distance', measure: 'medium' });
+    expect(state().combination.steps).toHaveLength(1);
+    expect(labels()).toEqual(['En garde']);
+    expect(state().change.label).toBe('Step 1 · A: Medium distance');
+    newStepMode(false);
+  });
+
+  it('sends the path under the blade, and straightens it again', () => {
+    state().shapeActivePath('under');
+    expect(state().past).toHaveLength(0);
+    state().act({ kind: 'distance', measure: 'medium' });
+    state().addStep();
+    state().act({ kind: 'footwork', move: 'lunge' });
+    state().shapeActivePath('under');
+    expect(currentStep(state()).pins?.A).toHaveLength(1);
+    state().shapeActivePath('direct');
+    expect(currentStep(state()).pins).toBeUndefined();
+  });
+});

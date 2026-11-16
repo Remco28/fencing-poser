@@ -3,7 +3,7 @@
 Where the app is now, where each part lives, and what comes next. Update this with every round of work. Decisions and their reasons are in [DECISIONS.md](DECISIONS.md); the original plan is in [DESIGN.md](DESIGN.md).
 
 **Live:** https://remco28.github.io/fencing-poser/ (republished on every push to `main`)
-**Last updated:** 2026-10-13
+**Last updated:** 2026-11-15
 
 ## The rule for every round
 
@@ -13,11 +13,14 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 
 ### Posing
 - **Mannequin**: 17 joints with anatomical angles and human limits; height, build, handedness, grip per fencer. `src/model/joints.ts`, `src/rig/`
-- **Drag-to-pose**: handles on hands, point, feet, hips; exact two-bone IK, feet stay planted when the hips move. `src/ik/ik.ts`, `src/ik/Handles.tsx`
+- **Sketch**: a flat stick-figure strip under the 3D view (Side, Above, Behind; `K` shows or hides it; drag the divider to resize). It is the same two fencers, not a separate drawing: every joint is a dot to drag, the 3D view follows live, and a marker under each fencer slides them along the piste with the distance between front feet shown. From behind, only the opponent's blade is drawn. `src/sketch/`
+- **Dots** (the sketch and the 3D handles share them): hips, chest, head, hands, elbows, feet, knees, point. A dot goes where it is dragged: a hand or foot pulled past its reach brings the body (hips slide and sink, feet planted); the point turns the wrist first, then moves the hand; elbows and knees turn the limb about its ends. `src/ik/drag.ts`, `src/ik/ik.ts`, `src/ik/Handles.tsx`
+- **Keep in place**: switches for Feet (on by default), Hand, Point. Whatever is kept stays where it is while anything else moves, by drag or by key. `src/ik/drag.ts` (`keepInPlace`)
+- **Actions**: one click per fencing action for the posing fencer: distance (short, medium, long), footwork (advance, retreat, half lunge, lunge, recover, flèche), extend, beat 4/6, engage 4/6, parries 1–8, hit a target with the arm, a lunge or a flèche, and the path in (direct, under the blade, over the blade). "New step for each action" adds and names the step. `src/actions/actions.ts`, `src/editor/ActionsPanel.tsx`
 - **Keyboard**: Tab / A D · S W · Q E / Shift / Alt / X / R and more (full list in the Help tab). `src/editor/keyboard.ts`
 - **Controls beside the joint** (the only joint controls): keys and arrows per movement, click a value to type an angle, a position row for the hips, Straighten; coloured motion paths with key tags; a **thumb clock** for the wrist; stomach and chest bend as **one spine** by default. `src/editor/JointHud.tsx`, `MotionGuides.tsx`, `ThumbDial.tsx`
 - **Presets**: footwork, seven parries, body evasions, and the coach's own, each with a ⋯ menu (apply to the other fencer, replace, rename, delete or restore); apply to the whole body, arms and torso, or legs. `src/presets/`, `src/editor/PresetsPanel.tsx`
-- **Blades**: engage in sixte or quarte, touch a target (the body leans in if the arm falls short, never past balanced), blades push each other aside. `src/ik/blades.ts`
+- **Blades**: a parry, engagement or beat carries the opponent's blade to that line's side, strong against weak (`layAgainst`); a hit brings the point onto a target (the body leans in if the arm falls short, never past balanced); otherwise blades push each other aside. `src/ik/blades.ts`
 - **Balance**: centre of mass from a segment-mass model; an "off balance" mark appears under a fencer whose centre lies outside the feet (editor only). `src/rig/balance.ts`, `src/scene/BalanceMark.tsx`
 
 ### Combinations
@@ -36,7 +39,7 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 - **Export**: captioned picture, PDF handout (two steps per page), video of smooth playback, combination file. `src/export/`
 
 ### Quality
-- 102 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, blades, playback, links, merging, store); run `npm test`.
+- 243 unit tests (including 1,000 random poses that must stay above the floor) (anatomy directions, IK, dragging, actions, blades, playback, links, merging, store); run `npm test`.
 - Visual checks are done in a headless browser through a dev-only `window.__editor` hook.
 
 ## Testing with people
@@ -45,7 +48,9 @@ Before adding anything, look at what exists: can something be deleted, merged, o
 
 ## Next
 
-Decided by the coach's feedback from round 1. Until then: keep trimming what the round shows is unused.
+- The coach tries the sketch and the actions on real phrases; fix what reads wrong as fencing (see Known rough edges).
+- A redesign of the look and layout is under way in parallel (office work #207): the side panel goes away, the step bar becomes a storyboard. Behaviour (store, `src/ik`, `src/actions`, sketch maths) stays as built here.
+- Later, if wanted: typing a phrase ("A: beat 6, disengage, lunge to the hand") to draft the steps; a drawing or photo behind the sketch to trace.
 
 ## Deliberately not done
 
@@ -61,9 +66,19 @@ Decided by the coach's feedback from round 1. Until then: keep trimming what the
 | Arrows | The point trail shows the movement; arrows would be one more thing to place by hand. |
 | "Motion only" steps | Replaced by path shaping; still played in old combinations, no longer offered. |
 | Moving a whole arm as one | The hand drag already moves the whole arm; only the spine needed it. |
+| Pose from a photo or video | Possible in the browser, but the coach wants the sketch and actions first. |
+| Uploading drawn stick figures | A program would have to guess which line is which limb, with no depth; dragging dots on the figure that is already there is quicker. |
+| Flat camera views in the 3D scene | The Side / Behind / Overhead buttons also set what students see; a strip beside the 3D view avoids overwriting that. |
+| Dragging the sticks themselves | Dots cover it; a stick drag would need a second rule to learn. |
 
 ## Known rough edges
 
 - The flèche, prime, stomach-tuck and lean-back presets are drafts; the coach may want to replace them.
+- The named distances sit close together (front feet 0.86 m, 1.31 m and 1.66 m apart for two 1.78 m fencers) because the lunge preset only carries the front foot 0.53 m. They are worked out from the Lunge pose, so replacing that pose with a deeper lunge moves them.
+- A low parry (2, 7, 8) chosen against a high attack does not find the blade, and a parry in a lunge is low because the whole body is.
+- A hit asked for from too close cannot land (the blade is longer than the gap); the app says so rather than stepping the fencer back.
+- After a beat the blades stay in contact (the picture is the moment of the beat); a flèche hit from the en garde lines needs nearly its 3 m limit.
+- From above, the sketch draws the fencers small, because the piste is long.
+- With the sketch open on a small screen the 3D view is short; Fit both (Z) reframes it.
 - Video length can drift on a machine that renders very slowly (it follows real time).
 - Libraries do not move between sites: the copy on `localhost` and the one on GitHub Pages are separate browsers' storage as far as the browser is concerned. Move work with Library → Back up everything → Import, or point both at the same sync folder.

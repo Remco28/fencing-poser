@@ -27,6 +27,7 @@ import { describeEdit } from './history.ts';
 import {
   copyStep,
   FORWARD,
+  HEADING,
   newCombination,
   newId,
   type Combination,
@@ -42,10 +43,21 @@ import { mirrorPose } from '../model/mirror.ts';
 import { angle, type FencerSetup, type Pose } from '../model/types.ts';
 import type { PresetPose } from '../presets/builtin.ts';
 import { advance, keyAt } from '../viewer/player.ts';
-import { engage, pushBlades, touch } from '../ik/blades.ts';
+import { pushBlades } from '../ik/blades.ts';
+import { actionLabel, applyAction, shapePath, type Action, type HitWith, type PathShape } from '../actions/actions.ts';
+import { DEFAULT_KEEP, keepInPlace, type Keep } from '../ik/drag.ts';
+import type { SketchView } from '../sketch/project.ts';
 import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type ShownPreset } from '../presets/library.ts';
 
 export type PresetPart = 'all' | 'upper' | 'lower';
+
+/** The flat stick-figure strip under the 3D view. */
+export interface SketchState {
+  open: boolean;
+  view: SketchView;
+  /** The strip's height, as a fraction of the stage's. */
+  height: number;
+}
 export type { Units };
 
 /** What made a state, for the history list. */
@@ -136,6 +148,13 @@ interface EditorState extends Snapshot {
   /** Ask the camera to frame both fencers, or one. */
   fitRequest: { who: 'both' | FencerId; id: number } | null;
   requestFit: (who: 'both' | FencerId) => void;
+  /** What stays where it is while something else moves (editor state, never saved). */
+  keep: Keep;
+  toggleKeep: (key: keyof Keep) => void;
+  sketch: SketchState;
+  toggleSketch: () => void;
+  setSketchView: (view: SketchView) => void;
+  setSketchHeight: (height: number) => void;
   /** Whether drag handles show on the active fencer. */
   handles: boolean;
   toggleHandles: () => void;
@@ -145,10 +164,21 @@ interface EditorState extends Snapshot {
   resetJoint: (joint: JointName) => void;
   /** Apply a preset to the other fencer, without switching to them. */
   applyPresetToOther: (preset: PresetPose) => void;
-  /** The posing fencer lays their blade against the opponent's, in sixte or quarte. */
-  engageBlades: (line: 'sixte' | 'quarte') => void;
-  /** Bring the posing fencer's point onto a target; returns how far short it fell (0 if it landed). */
-  touchTarget: (area: TargetArea) => number;
+  /**
+   * The posing fencer performs a named action (one undo step). Names the step
+   * for it and highlights a target that is hit. Says how far short a hit fell
+   * in metres (and whether that was from being too close), or that the blades
+   * were too far apart to meet, in which case nothing changed.
+   */
+  act: (action: Action) => { short: number; close: boolean; apart: boolean };
+  /** Each action (but a distance) is added as a new step after the current one. Remembered. */
+  actionsNewStep: boolean;
+  toggleActionsNewStep: () => void;
+  /** What the Hit buttons hit with (for the session). */
+  hitWith: HitWith;
+  setHitWith: (hitWith: HitWith) => void;
+  /** Send the posing fencer's point under or over the opponent's blade on the way into this step, or straight ('direct'). */
+  shapeActivePath: (shape: PathShape) => void;
   /** Apply a preset to the whole body, or only the upper body or the legs. */
   applyPreset: (preset: PresetPose, part?: PresetPart) => void;
   presetPart: PresetPart;
@@ -201,6 +231,32 @@ interface EditorState extends Snapshot {
 
 const HISTORY_LIMIT = 200;
 
+/** A step label written by an action: "A: Beat 6". */
+const AUTO_LABEL = /^[AB]: /;
+
+/** The step label after `part` is added: set when empty, appended when made only of such parts, else the coach's own. */
+export function labelWith(label: string, part: string): string {
+  if (!label.trim()) return part;
+  return label.split(' · ').every((p) => AUTO_LABEL.test(p)) ? `${label} · ${part}` : label;
+}
+
+function rememberedFlag(key: string, fallback: boolean): boolean {
+  try {
+    const v = localStorage.getItem(`fencing-poser.${key}`);
+    return v === null ? fallback : v === 'on';
+  } catch {
+    return fallback;
+  }
+}
+
+function rememberFlag(key: string, on: boolean) {
+  try {
+    localStorage.setItem(`fencing-poser.${key}`, on ? 'on' : 'off');
+  } catch {
+    // Only a preference.
+  }
+}
+
 function rememberedLabels(): boolean {
   try {
     return localStorage.getItem('fencing-poser.labels') !== 'off';
@@ -208,6 +264,27 @@ function rememberedLabels(): boolean {
     return true;
   }
 }
+
+/** A remembered editor preference, or `fallback` if there is none (or no storage). */
+function remembered<T extends object>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(`fencing-poser.${key}`);
+    return raw ? { ...fallback, ...(JSON.parse(raw) as Partial<T>) } : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function remember(key: string, value: object) {
+  try {
+    localStorage.setItem(`fencing-poser.${key}`, JSON.stringify(value));
+  } catch {
+    // Only a preference.
+  }
+}
+
+const DEFAULT_SKETCH: SketchState = { open: true, view: 'side', height: 0.4 };
+
 const COALESCE_MS = 1000;
 
 export function currentStep(s: Snapshot): Step {
@@ -297,6 +374,12 @@ function withAngle(pose: Pose, joint: JointName, dof: string, value: number): Po
 
 const PISTE_HALF = 8.5;
 
+function setSketch(s: EditorState, change: Partial<SketchState>): Partial<EditorState> {
+  const sketch = { ...s.sketch, ...change };
+  remember('sketch', sketch);
+  return { sketch };
+}
+
 function fresh(combination: Combination): Partial<EditorState> {
   return {
     combination,
@@ -382,10 +465,10 @@ export const useEditor = create<EditorState>((set, get) => {
     setAngle: (joint, dof, value) =>
       set((s) => {
         const pose = activePose(s);
-        const next = spineJoint(s, joint)
-          ? bendSpine(pose, dof, value - spineAngle(pose, dof))
-          : withAngle(pose, joint, dof, value);
-        return edit(s, { combination: moved(s, next) }, `${s.active}.${joint}.${dof}`);
+        const spine = spineJoint(s, joint);
+        const next = spine ? bendSpine(pose, dof, value - spineAngle(pose, dof)) : withAngle(pose, joint, dof, value);
+        const kept = keepInPlace(pose, next, activeSetup(s), HEADING[s.active], s.keep, spine ? ['abdomen', 'chest'] : [joint]);
+        return edit(s, { combination: moved(s, kept) }, `${s.active}.${joint}.${dof}`);
       }),
     pathEdit: false,
     editPath: (index) => set({ stepIndex: index, pathEdit: true, selected: null, preview: null }),
@@ -422,9 +505,11 @@ export const useEditor = create<EditorState>((set, get) => {
         const dof = s.selected && JOINT_BY_NAME[s.selected].dofs[dofIndex];
         if (!s.selected || !dof) return {};
         const current = activePose(s);
-        const pose = spineJoint(s, s.selected)
+        const spine = spineJoint(s, s.selected);
+        const next = spine
           ? bendSpine(current, dof.key, delta)
           : withAngle(current, s.selected, dof.key, angle(current, s.selected, dof.key) + delta);
+        const pose = keepInPlace(current, next, activeSetup(s), HEADING[s.active], s.keep, spine ? ['abdomen', 'chest'] : [s.selected]);
         return {
           ...edit(s, { combination: moved(s, pose) }, `${s.active}.${s.selected}.${dof.key}`),
           lastNudge: { dofIndex, id: (s.lastNudge?.id ?? 0) + 1 },
@@ -478,6 +563,17 @@ export const useEditor = create<EditorState>((set, get) => {
     fitRequest: null,
     requestFit: (who) => set((s) => ({ fitRequest: { who, id: (s.fitRequest?.id ?? 0) + 1 } })),
     dragPose: (pose, dragId) => set((s) => edit(s, { combination: moved(s, pose) }, `drag.${dragId}`)),
+    keep: remembered('keep', DEFAULT_KEEP),
+    toggleKeep: (key) =>
+      set((s) => {
+        const keep = { ...s.keep, [key]: !s.keep[key] };
+        remember('keep', keep);
+        return { keep };
+      }),
+    sketch: remembered('sketch', DEFAULT_SKETCH),
+    toggleSketch: () => set((s) => setSketch(s, { open: !s.sketch.open })),
+    setSketchView: (view) => set((s) => setSketch(s, { view })),
+    setSketchHeight: (height) => set((s) => setSketch(s, { height })),
     handles: true,
     toggleHandles: () => set((s) => ({ handles: !s.handles })),
     advance: (metres) => {
@@ -513,22 +609,53 @@ export const useEditor = create<EditorState>((set, get) => {
         const after = pushBlades(s.combination, step.poses, { ...step.poses, [f]: pose }, f);
         return edit(s, { combination: withStep(s, (st) => ({ ...st, poses: after })) }, undefined, `Step ${s.stepIndex + 1} · ${f}: ${preset.name}`);
       }),
-    engageBlades: (line) =>
-      set((s) =>
-        edit(
-          s,
-          { combination: withStep(s, (st) => ({ ...st, poses: engage(s.combination, st.poses, s.active, line) })) },
-          undefined,
-          `Step ${s.stepIndex + 1} · ${s.active} engages in ${line}`,
-        ),
-      ),
-    touchTarget: (area) => {
+    act: (action) => {
       const s = get();
-      const before = currentStep(s).poses;
-      const result = touch(s.combination, before, s.active, area);
-      const poses = pushBlades(s.combination, before, result.poses, s.active);
-      set(edit(s, { combination: withStep(s, (st) => ({ ...st, poses })) }, undefined, `Step ${s.stepIndex + 1} · ${s.active} touches`));
-      return result.short;
+      const newStep = s.actionsNewStep && action.kind !== 'distance';
+      // In new-step mode the action happens on a copy of this step, added after it.
+      let base: Snapshot = snapshot(s);
+      if (newStep) {
+        const steps = [...s.combination.steps];
+        steps.splice(s.stepIndex + 1, 0, copyStep(currentStep(s)));
+        base = { ...base, combination: withSteps(s.combination, steps), stepIndex: s.stepIndex + 1 };
+      }
+      const f = s.active;
+      const opp: FencerId = f === 'A' ? 'B' : 'A';
+      const result = applyAction(base.combination, currentStep(base).poses, f, action, s.presets);
+      // Blades too far apart to meet: nothing happens, and no step is added for it.
+      if (result.apart) return { short: 0, close: false, apart: true };
+      const short = result.short ?? 0;
+      const part = `${f}: ${actionLabel(action)}`;
+      const combination = withStep(base, (st) => {
+        let next: Step = { ...st, poses: result.poses };
+        if (action.kind !== 'distance') next = { ...next, label: labelWith(st.label, part) };
+        if (action.kind === 'hit' && !short) {
+          const targets = st.display?.targets ?? [];
+          if (!targets.some((t) => t.fencer === opp && t.area === action.area)) {
+            next = { ...next, display: { ...st.display, targets: [...targets, { fencer: opp, area: action.area }] } };
+          }
+        }
+        return next;
+      });
+      set({
+        ...edit(s, { combination, stepIndex: base.stepIndex }, undefined, `Step ${base.stepIndex + 1} · ${part}`),
+        // Shaping the path into the old step makes no sense on a new one.
+        ...(newStep && { pathEdit: false }),
+      });
+      return { short, close: !!result.close, apart: false };
+    },
+    actionsNewStep: rememberedFlag('actionsNewStep', false),
+    toggleActionsNewStep: () =>
+      set((s) => {
+        rememberFlag('actionsNewStep', !s.actionsNewStep);
+        return { actionsNewStep: !s.actionsNewStep };
+      }),
+    hitWith: 'arm',
+    setHitWith: (hitWith) => set({ hitWith }),
+    shapeActivePath: (shape) => {
+      const s = get();
+      if (s.stepIndex === 0) return;
+      s.setPins(s.active, shapePath(s.combination, s.stepIndex, s.active, shape));
     },
     presetPart: 'all',
     setPresetPart: (presetPart) => set({ presetPart }),
