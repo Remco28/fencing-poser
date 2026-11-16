@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Vector3 } from 'three';
+import { INK_SOFT } from '../design.ts';
 import { HANDLE_COLOR, nextDragId } from '../ik/Handles.tsx';
 import { DOT_JOINT, DOTS, dotPositions, dragDot, headCentre, keptDots, type Dot } from '../ik/drag.ts';
 import { FENCERS, HEADING, type FencerId } from '../model/combination.ts';
@@ -33,12 +34,12 @@ const PAD = { top: 46, bottom: 34, side: 24 };
 
 const DOT_COLOR: Record<Dot, string> = {
   ...HANDLE_COLOR,
-  chest: '#6b737c',
-  head: '#6b737c',
-  elbow_r: '#9aa2ab',
-  elbow_l: '#9aa2ab',
-  knee_r: '#9aa2ab',
-  knee_l: '#9aa2ab',
+  chest: INK_SOFT,
+  head: INK_SOFT,
+  elbow_r: INK_SOFT,
+  elbow_l: INK_SOFT,
+  knee_r: INK_SOFT,
+  knee_l: INK_SOFT,
 };
 
 const DOT_RADIUS: Record<Dot, number> = {
@@ -508,9 +509,10 @@ export function Sketch() {
                       >
                         <title>{`${f}’s ${DOT_NAMES[dot]}${kept.includes(dot) ? ' (kept in place)' : ''}`}</title>
                         <circle className="hit" cx={cx} cy={cy} r={11} />
-                        {kept.includes(dot) && <circle className="kept" cx={cx} cy={cy} r={r + 3.5} stroke={DOT_COLOR[dot]} />}
                         {selected && <circle className="selected" cx={cx} cy={cy} r={r + 3.5} />}
-                        <circle className="fill" cx={cx} cy={cy} r={r} fill={DOT_COLOR[dot]} />
+                        {/* A paper dot with a ring; filled in while it is kept in place. */}
+                        <circle className={`fill${kept.includes(dot) ? ' kept' : ''}`} cx={cx} cy={cy} r={r} stroke={DOT_COLOR[dot]} />
+                        {kept.includes(dot) && <circle className="pin" cx={cx} cy={cy} r={r * 0.3} />}
                       </g>
                     );
                   })}

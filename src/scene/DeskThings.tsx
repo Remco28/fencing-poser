@@ -40,7 +40,7 @@ function Pencil() {
 function Notebook() {
   const thick = 0.09;
   return (
-    <group position={[4.6, thick / 2 - DESK_DROP, -3.1]} rotation={[0, -0.22, 0]}>
+    <group position={[4.4, thick / 2 - DESK_DROP, -3.4]} rotation={[0, -0.22, 0]}>
       <RoundedBox args={[1.5, thick, 2.0]} radius={0.03} castShadow receiveShadow>
         <meshStandardMaterial color={T.cover} roughness={0.75} />
       </RoundedBox>
@@ -56,11 +56,12 @@ function Notebook() {
   );
 }
 
-export function DeskThings() {
+/** `around`: where along the piste the fencers stand, so the things lie near them. */
+export function DeskThings({ around }: { around: number }) {
   return (
-    <>
+    <group position={[around, 0, 0]}>
       <Pencil />
       <Notebook />
-    </>
+    </group>
   );
 }

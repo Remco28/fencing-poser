@@ -4,20 +4,20 @@ const KEY = 'fencing-poser.toured';
 
 const CARDS: { title: string; body: string }[] = [
   {
-    title: 'Sketch the pose',
-    body: 'Under the 3D view is a flat stick-figure sketch of the same two fencers. Drag any dot (a hand, a foot, a knee, the hips, the point) and the body follows; the feet stay planted. The marker under a fencer slides them along the piste. The same dots work on the 3D figure.',
+    title: 'Pick up a fencer',
+    body: 'Click one of the wooden figures. Its tray opens with everything that fencer can do, and dots appear on the hands, feet, hips and point: drag one and the body follows. Click a body part for fine control of that joint.',
   },
   {
-    title: 'Or click a body part',
-    body: 'Its controls appear beside it, with the keys that move it. Faint coloured paths show where each key takes it. Tab moves to the next joint.',
+    title: 'Sketch it flat',
+    body: 'The sheet of paper under the view shows the same two fencers as stick figures. Every joint is a dot to drag, and the feet stay planted. The marker under a fencer slides them along the piste.',
   },
   {
-    title: 'Build the combination',
-    body: 'Most steps are one click: under Actions, pick a distance, footwork, a parry or a hit, and the fencer does it. Turn on “New step for each action” and each click adds a step, named for you. Press Play (or Space) to watch it move. “Path in” sends a point under or over the opponent’s blade.',
+    title: 'Build the phrase',
+    body: 'In the tray, pick what the fencer does next: a distance, footwork, a parry, a hit. With “New step for each action” on, each click adds a picture to the row along the bottom. Press Play (or Space) to watch it move.',
   },
   {
-    title: 'Share it',
-    body: 'Share gives students a link and a QR code for their phones, or exports a picture, a printable handout or a video. Your work saves in this browser as you go; Library keeps backups.',
+    title: 'Hand it to your students',
+    body: 'Share gives them a link and a QR code for their phones, or you a picture, a printable handout or a video. Everything saves as you go. The arrow at the top left goes back to the desk and your other combinations.',
   },
 ];
 
@@ -29,7 +29,7 @@ export function hasToured(): boolean {
   }
 }
 
-/** Four short cards on the first visit; reopened from the Help tab. */
+/** Four short cards on the first visit; reopened from Help. */
 export function Tour({ onClose }: { onClose: () => void }) {
   const [i, setI] = useState(0);
   const finish = () => {

@@ -1,7 +1,7 @@
 import { Billboard } from '@react-three/drei';
-import { useThree, type ThreeEvent } from '@react-three/fiber';
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { useMemo, useRef, useState } from 'react';
-import { Plane, Vector3 } from 'three';
+import { Plane, Vector3, type Group, type PerspectiveCamera } from 'three';
 import { ACCENT, PAPER } from '../design.ts';
 import { useEditor } from '../editor/store.ts';
 import type { FencerSetup, Pose } from '../model/types.ts';
@@ -30,6 +30,9 @@ export const HANDLE_NAMES: Record<Handle, string> = {
   point: 'épée point',
 };
 
+/** However far away the camera is, a dot is never smaller on screen than this (its radius, in pixels). */
+const MIN_PIXELS = 7.5;
+
 let dragCount = 0;
 
 /** A fresh id for one drag (3D handles and the sketch share them), so each drag undoes as one step. */
@@ -50,6 +53,19 @@ export function Handles({ setup, pose, heading }: { setup: FencerSetup; pose: Po
   const [hover, setHover] = useState<Handle | null>(null);
   const keep = useEditor((s) => s.keep);
   const kept = keptDots(setup, keep);
+  const dots = useRef<Partial<Record<Handle, Group | null>>>({});
+  const height = useThree((s) => s.size.height);
+
+  // Seen from far away the dots grow, so they can always be grabbed.
+  useFrame(() => {
+    const tan = Math.tan(((camera as PerspectiveCamera).fov * Math.PI) / 360);
+    for (const h of Object.keys(dots.current) as Handle[]) {
+      const dot = dots.current[h];
+      if (!dot) continue;
+      const metresPerPixel = (2 * camera.position.distanceTo(dot.position) * tan) / height;
+      dot.scale.setScalar(Math.max(1, (MIN_PIXELS * metresPerPixel) / RADIUS[h]));
+    }
+  });
 
   const start = (handle: Handle) => (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -80,9 +96,15 @@ export function Handles({ setup, pose, heading }: { setup: FencerSetup; pose: Po
   return (
     <>
       {(Object.keys(positions) as Handle[]).map((h) => (
-        <group key={h}>
+        <group
+          key={h}
+          position={positions[h]}
+          ref={(g) => {
+            dots.current[h] = g;
+          }}
+        >
           {/* A paper dot with an ink ring, always facing the camera; filled with ink while it is kept in place. */}
-          <Billboard position={positions[h]}>
+          <Billboard>
             <mesh renderOrder={10} raycast={() => null} scale={hover === h ? 1.25 : 1}>
               <circleGeometry args={[RADIUS[h], 32]} />
               <meshBasicMaterial color={kept.includes(h) ? ACCENT : PAPER} transparent opacity={0.96} depthTest={false} />
@@ -100,7 +122,6 @@ export function Handles({ setup, pose, heading }: { setup: FencerSetup; pose: Po
           </Billboard>
           {/* What is grabbed: an unseen ball a little larger than the dot. */}
           <mesh
-            position={positions[h]}
             renderOrder={10}
             userData={{ handle: h }}
             onPointerDown={start(h)}

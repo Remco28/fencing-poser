@@ -184,9 +184,11 @@ const LOOK_COLOR: Record<Exclude<Look, 'wood' | 'hover'>, string> = { selected: 
 function Wood() {
   const wood = use(WoodContext);
   const look = use(LookContext);
-  if (look === 'selected' || look === 'target') return <meshStandardMaterial color={LOOK_COLOR[look]} roughness={0.65} />;
+  // Two materials, told apart by key: one that is reused would keep the other's colour or grain.
+  if (look === 'selected' || look === 'target') return <meshStandardMaterial key="flat" color={LOOK_COLOR[look]} roughness={0.65} />;
   return (
     <meshStandardMaterial
+      key="wood"
       map={woodGrain(wood)}
       roughness={0.62}
       emissive={wood.base}

@@ -4,42 +4,39 @@ import { useMemo, useRef } from 'react';
 import { Vector3 } from 'three';
 import { WOOD_OF } from '../design.ts';
 import { Handles } from '../ik/Handles.tsx';
-import { FENCERS, HEADING, isShaped, targetParts } from '../model/combination.ts';
-import { Mannequin } from '../rig/Mannequin.tsx';
-import { CameraRig } from '../scene/CameraRig.tsx';
-import { FitRig } from '../scene/FitRig.tsx';
-import { jointPosition, solveRig } from '../rig/kinematics.ts';
+import { PathHandles } from '../ik/PathHandles.tsx';
+import { FENCERS, HEADING, targetParts } from '../model/combination.ts';
 import { JOINT_NAMES } from '../model/joints.ts';
+import { balanceOf } from '../rig/balance.ts';
+import { jointPosition, solveRig } from '../rig/kinematics.ts';
+import { Mannequin } from '../rig/Mannequin.tsx';
+import { BalanceMark } from '../scene/BalanceMark.tsx';
+import { CameraRig } from '../scene/CameraRig.tsx';
+import { ClearView } from '../scene/ClearView.tsx';
+import { Environment } from '../scene/Environment.tsx';
+import { FitRig } from '../scene/FitRig.tsx';
+import { EDITOR_FOV } from '../scene/frame.ts';
+import { measure, viewFor } from '../scene/measure.ts';
+import { CameraDriver, Ticker } from '../scene/playback.tsx';
+import { PointTrail } from '../scene/PointTrail.tsx';
+import { ReadoutLines } from '../scene/Readouts.tsx';
+import { frameAt, keyAt } from '../viewer/player.ts';
 import { HudTracker, JointHud } from './JointHud.tsx';
 import { guidesFor, MotionGuides, useRecentNudge } from './MotionGuides.tsx';
+import { currentStep, useEditor } from './store.ts';
 import { ThumbDial } from './ThumbDial.tsx';
-import { measure, rigsFor, viewFor } from '../scene/measure.ts';
-import { Environment } from '../scene/Environment.tsx';
-import { ReadoutLines } from '../scene/Readouts.tsx';
-import { PointTrail } from '../scene/PointTrail.tsx';
-import { PathHandles } from '../ik/PathHandles.tsx';
-import { BalanceMark } from '../scene/BalanceMark.tsx';
-import { balanceOf } from '../rig/balance.ts';
-import { formatDistance } from '../model/units.ts';
-import { currentStep, hasShot, useEditor, viewIsShot } from './store.ts';
-import { Switch } from '../ui/Switch.tsx';
-import { CameraDriver, Ticker } from '../scene/playback.tsx';
-import { frameAt, keyAt } from '../viewer/player.ts';
+import { useUi } from './ui.ts';
+import { clearNow, pointsOf } from './views.ts';
 
-// Dev aid: ?view=top|front|back|side|near|nearback|nearfront picks the start view.
-const VIEWS: Record<string, [number, number, number]> = {
-  side: [0, 1.3, 8],
-  top: [0, 9, 0.01],
-  front: [7, 1.6, 0.6],
-  back: [-7, 1.6, 0.6],
-  near: [0.6, 1.3, 2.6],
-  nearback: [-2.2, 1.5, -1.2],
-  nearfront: [2.6, 1.3, 0.6],
-};
-const START = VIEWS[new URLSearchParams(location.search).get('view') ?? ''] ?? [0.6, 2.8, 8.4];
-
+/**
+ * The 3D view: the two fencers on the desk, and everything drawn on them
+ * (handles, guides, paths, measurements). It fills the whole window, behind
+ * the panels; the camera keeps its subject in the part that is clear.
+ */
 export function Stage() {
   const s = useEditor();
+  const desk = useUi((u) => u.desk);
+  const posing = useUi((u) => u.posing);
   const editingStep = currentStep(s);
   // While previewing, show the in-between frame and the step it belongs to.
   const playing = !!s.preview;
@@ -54,23 +51,21 @@ export function Stage() {
     for (let i = s.stepIndex - 1; i >= 0; i--) if (!s.combination.steps[i].motionOnly) return i;
     return s.stepIndex - 1;
   })();
-  const previous = !playing && previousIndex >= 0 ? s.combination.steps[previousIndex] : null;
+  const previous = !playing && !desk && previousIndex >= 0 ? s.combination.steps[previousIndex] : null;
   const display = step.display ?? {};
-  // Is the coach looking from where students will see this step?
-  const onShot = viewIsShot(s);
   const showPast = !!previous && (shaping || !!display.ghost);
-  const m = useMemo(() => (display.distance ? measure(s.combination, step) : null), [display.distance, s.combination, step]);
+  const m = useMemo(() => (display.distance && !desk ? measure(s.combination, step) : null), [display.distance, desk, s.combination, step]);
   // Off-balance warnings, for poses the coach makes (not while playing).
   const balances = useMemo(
     () =>
-      playing
+      playing || desk
         ? []
         : FENCERS.flatMap((f) => {
             if (step.poses[f].root.lift > 0) return [];
             const b = balanceOf(solveRig(s.combination.fencers[f], step.poses[f], HEADING[f]));
             return b.outside > 0 ? [{ f, b }] : [];
           }),
-    [playing, step, s.combination.fencers],
+    [playing, desk, step, s.combination.fencers],
   );
   const hud = useRef<HTMLDivElement>(null);
   const leader = useRef<SVGLineElement>(null);
@@ -107,31 +102,22 @@ export function Stage() {
     [selectedPoint, guides, activeRig],
   );
 
-  /** Everything to keep in frame: every joint, the head and the point. */
-  const fitPoints = () => {
-    const rigs = rigsFor(s.combination, step);
-    const who = s.fitRequest?.who ?? 'both';
-    return FENCERS.filter((f) => who === 'both' || who === f).flatMap((f) => {
-      const rig = rigs[f];
-      const head = jointPosition(rig, 'neck').add(new Vector3(0, 0.17 * rig.layout.height, 0));
-      return [...JOINT_NAMES.map((j) => jointPosition(rig, j)), head, rig.tip.clone(), new Vector3(jointPosition(rig, 'pelvis').x, 0, 0)];
-    });
-  };
-
   return (
     <>
       <Canvas
         shadows
-        camera={{ position: START, fov: 40 }}
-        onPointerMissed={() => s.select(null)}
+        camera={{ position: [-2.4, 4.4, 9.5], fov: EDITOR_FOV }}
+        // A click on the bare desk lets go of the joint. It does not put the fencer
+        // down: a click that just misses an arm would close the tray (Esc or its × do that).
+        onPointerMissed={() => !desk && s.select(null)}
         gl={{ preserveDrawingBuffer: true }}
       >
-        <Environment />
+        <Environment things={desk ? (step.poses.A.root.x + step.poses.B.root.x) / 2 : undefined} />
         {FENCERS.map((f) => (
           <Mannequin
             key={f}
-            label={s.showLabels ? f : undefined}
-            active={s.active === f && !playing}
+            label={s.showLabels && !desk ? f : undefined}
+            active={s.active === f && posing && !playing}
             setup={s.combination.fencers[f]}
             pose={step.poses[f]}
             heading={HEADING[f]}
@@ -140,8 +126,22 @@ export function Stage() {
             targets={(display.targets ?? [])
               .filter((t) => t.fencer === f)
               .flatMap((t) => targetParts(t.area, s.combination.fencers[f]))}
-            onSelect={shaping ? undefined : (joint) => s.select(joint, f)}
-            onActivate={() => s.setActive(f)}
+            onSelect={
+              shaping
+                ? undefined
+                : (joint) => {
+                    // On the desk, picking up a figure opens the combination; a first
+                    // click on a fencer picks them, and the next picks a joint.
+                    if (desk) return useUi.getState().leaveDesk();
+                    if (posing && s.active === f) return s.select(joint, f);
+                    s.setActive(f);
+                    useUi.getState().setPosing(true);
+                  }
+            }
+            onActivate={() => {
+              s.setActive(f);
+              useUi.getState().setPosing(true);
+            }}
           />
         ))}
         {showPast &&
@@ -171,7 +171,7 @@ export function Stage() {
         ))}
         {s.selected && <MotionGuides guides={guides} active={recent ?? s.hotDof} />}
         {dialSide && <ThumbDial rig={activeRig} side={dialSide} weapon={dialSide === weaponSide} />}
-        {s.handles && !s.selected && !playing && !shaping && (
+        {posing && s.handles && !s.selected && !playing && !shaping && (
           <Handles setup={s.combination.fencers[s.active]} pose={step.poses[s.active]} heading={HEADING[s.active]} />
         )}
         <OrbitControls
@@ -181,181 +181,23 @@ export function Stage() {
           enabled={!s.cameraLocked && !playing}
           zoomToCursor
         />
+        <ClearView clear={() => useUi.getState().clear} />
         {playing && <Ticker onTick={s.tickPreview} />}
         {playing && <CameraDriver view={frame?.camera ?? viewFor('side', step)} />}
         <CameraRig flight={s.flight} onView={s.setView} />
-        <FitRig request={s.fitRequest} points={fitPoints} onView={s.requestView} />
-        <HudTracker anchor={selectedPoint} avoid={hudAvoid} el={hud} leader={leader} />
+        <FitRig
+          request={s.fitRequest}
+          points={() => pointsOf(s.combination, step, s.fitRequest?.who ?? 'both')}
+          onView={s.requestView}
+          clear={clearNow}
+        />
+        <HudTracker anchor={selectedPoint} avoid={hudAvoid} el={hud} leader={leader} within={clearNow} />
       </Canvas>
 
       <svg className="hud-leader" aria-hidden>
         <line ref={leader} />
       </svg>
       <JointHud el={hud} />
-      {showPast && !shaping && s.stepIndex > 0 && (
-        <button className="shape-prompt" onClick={() => s.editPath(s.stepIndex)} title="Bend the route a point takes into this step">
-          ⤳ Shape the path from step {s.stepIndex} to {s.stepIndex + 1}
-        </button>
-      )}
-      {shaping && (
-        <div className="path-banner" role="status">
-          <p>
-            <strong>
-              Path {s.stepIndex} → {s.stepIndex + 1}
-            </strong>
-            <span>Drag the red path up, down or sideways (up to 3 rings). Double-click a ring to remove it.</span>
-          </p>
-          <button
-            onClick={() => FENCERS.forEach((f) => (step.pins?.[f] || step.via?.[f] || step.bend?.[f]) && s.setPins(f, null))}
-            disabled={!isShaped(step)}
-            title="Back to the plain, direct movement. The poses at both steps never change."
-          >
-            Straighten
-          </button>
-          <button className="primary" onClick={s.exitPath} title="Back to posing (Esc)">
-            Done
-          </button>
-        </div>
-      )}
-      {s.preview?.playing && (
-        <button className="stage-stop" onClick={s.stopPreview} title="Stop playing (Space or Esc)">
-          ■ Stop
-        </button>
-      )}
-      {!playing && !shaping && (
-        <p className="camera-hint" aria-hidden>
-          {s.cameraLocked ? (
-            <>View locked · <kbd>L</kbd> unlocks</>
-          ) : (
-            <>
-              Drag to turn · Right-drag to pan · Scroll to zoom
-            </>
-          )}
-        </p>
-      )}
-
-      <div className="stage-tools" aria-hidden={playing || undefined}>
-        <div className="tool-group" role="toolbar" aria-label="Camera">
-          <span className="group-label">Camera</span>
-          <button onClick={() => s.requestView(viewFor('side', step))} disabled={s.cameraLocked || playing}>
-            Side
-          </button>
-          <button onClick={() => s.requestView(viewFor('overhead', step))} disabled={s.cameraLocked || playing}>
-            Overhead
-          </button>
-          <button onClick={() => s.requestFit('both')} disabled={s.cameraLocked || playing} title="Zoom so both fencers fill the view (Z)">
-            Fit both
-          </button>
-          {FENCERS.map((f) => (
-            <span key={f} className="fencer-views" role="group" aria-label={`Fencer ${f}`}>
-              <span className={`fencer-badge${f === s.active ? ' on' : ''}`} aria-hidden>
-                {f}
-              </span>
-              <button
-                onClick={() => s.requestView(viewFor(f === 'A' ? 'behindA' : 'behindB', step))}
-                disabled={s.cameraLocked || playing}
-                title={`Look over ${f}’s shoulder`}
-              >
-                Behind
-              </button>
-              <button
-                onClick={() => s.requestFit(f)}
-                disabled={s.cameraLocked || playing}
-                title={`Zoom in on fencer ${f}${f === s.active ? ' (Shift+Z)' : ''}`}
-              >
-                Zoom
-              </button>
-            </span>
-          ))}
-          <span className="divider" />
-          <button
-            onClick={s.setShot}
-            disabled={playing || onShot}
-            title={
-              onShot
-                ? 'Students see this step from here'
-                : s.combination.sharedView
-                  ? 'Students will see every step from where you are looking now'
-                  : 'Students will see this step from where you are looking now. Looking around while you work never changes it.'
-            }
-          >
-            {onShot ? '✓ Students see this view' : 'Use this view for students'}
-          </button>
-          <button
-            onClick={s.showShot}
-            disabled={playing || s.cameraLocked || onShot || !hasShot(step)}
-            title={hasShot(step) ? 'Look from where students see this step' : 'No view chosen for this step yet: students get the side view'}
-          >
-            Students’ view
-          </button>
-          <span className="divider" />
-          <Switch on={s.cameraLocked} onToggle={s.toggleCameraLock} title="When on, the camera cannot be moved by accident (L)">
-            Lock
-          </Switch>
-          <Switch
-            on={!!s.combination.sharedView}
-            onToggle={s.toggleSharedView}
-            title="When on, students see every step from the same view"
-          >
-            One view for all steps
-          </Switch>
-        </div>
-        <div className="tool-row">
-          <div className="tool-group" role="toolbar" aria-label="Show">
-            <span className="group-label">Show</span>
-            <Switch on={!!display.distance} onToggle={() => s.setDisplay({ distance: !display.distance })} disabled={playing} title="Distances for this step">
-              Distance
-            </Switch>
-            <Switch
-              on={!!display.ghost}
-              onToggle={() => s.setDisplay({ ghost: !display.ghost })}
-              disabled={!previous && !display.ghost}
-              title={
-                s.stepIndex > 0
-                  ? 'Show the previous step faintly, and the path of each point since then'
-                  : 'The first step has nothing before it'
-              }
-            >
-              Ghost
-            </Switch>
-            <Switch on={s.showLabels} onToggle={s.toggleLabels} title="The A and B tags above the fencers">
-              Labels
-            </Switch>
-            <Switch on={s.sketch.open} onToggle={s.toggleSketch} title="A flat stick-figure drawing under the view, where every joint can be dragged (K)">
-              Sketch
-            </Switch>
-          </div>
-          <div className="tool-group" role="toolbar" aria-label="Keep in place">
-            <span className="group-label">Keep in place</span>
-            <Switch on={s.keep.feet} onToggle={() => s.toggleKeep('feet')} title="Both feet stay where they are while you move anything else">
-              Feet
-            </Switch>
-            <Switch on={s.keep.hand} onToggle={() => s.toggleKeep('hand')} title="The weapon hand stays where it is while you move anything else">
-              Hand
-            </Switch>
-            <Switch on={s.keep.point} onToggle={() => s.toggleKeep('point')} title="The épée point stays where it is while you move anything else">
-              Point
-            </Switch>
-          </div>
-        </div>
-      </div>
-
-      {m && (
-        <dl className="readouts">
-          <dt>Between front feet</dt>
-          <dd>{formatDistance(m.feet.distance, s.units)}</dd>
-          {FENCERS.map((f) => (
-            <div key={f}>
-              <dt>
-                {f}’s point to {f === 'A' ? 'B' : 'A'}
-              </dt>
-              <dd className={m.reach[f].distance < 0.01 ? 'touch' : ''}>
-                {m.reach[f].distance < 0.01 ? 'Touch' : formatDistance(m.reach[f].distance, s.units)}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
     </>
   );
 }

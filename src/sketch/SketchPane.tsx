@@ -1,28 +1,35 @@
-import { useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { useEditor } from '../editor/store.ts';
 import { Sketch } from './Sketch.tsx';
 
-/** The strip's limits: at least this tall (px), at most this share of the stage. */
-const MIN_PX = 140;
-const MAX_SHARE = 0.75;
+/** The sheet's limits: at least this tall (px), at most this share of the window. */
+const MIN_PX = 150;
+const MAX_SHARE = 0.55;
+/** The height is kept as a share of the room left for the view and the sketch together, which is about this much of the window. */
+const ROOM = 0.62;
 
-/** The sketch strip under the 3D view, with a divider above it to drag its height. */
-export function SketchPane({ container }: { container: RefObject<HTMLDivElement | null> }) {
+/**
+ * The sketch: a sheet of paper lying on the desk under the 3D view, with the
+ * same two fencers drawn flat on it. Drag its top edge to make it taller.
+ */
+export function SketchPane() {
   const height = useEditor((s) => s.sketch.height);
   const setHeight = useEditor((s) => s.setSketchHeight);
+  const sheet = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
   const resize = (e: ReactPointerEvent) => {
-    const box = container.current?.getBoundingClientRect();
-    if (!dragging.current || !box || box.height <= 0) return;
-    const share = (box.bottom - e.clientY) / box.height;
-    setHeight(Math.min(MAX_SHARE, Math.max(MIN_PX / box.height, share)));
+    const box = sheet.current?.getBoundingClientRect();
+    if (!dragging.current || !box) return;
+    const share = (box.bottom - e.clientY) / window.innerHeight;
+    setHeight(Math.min(MAX_SHARE, Math.max(MIN_PX / window.innerHeight, share)) / ROOM);
   };
 
   return (
-    <>
+    <div className="sketch-sheet" ref={sheet} style={{ height: `${Math.min(MAX_SHARE, height * ROOM) * 100}vh`, minHeight: MIN_PX }}>
+      <Sketch />
       <div
-        className="sketch-divider"
+        className="sketch-grab"
         role="separator"
         aria-orientation="horizontal"
         aria-label="Drag to resize the sketch"
@@ -40,9 +47,6 @@ export function SketchPane({ container }: { container: RefObject<HTMLDivElement 
         }}
         onPointerCancel={() => (dragging.current = false)}
       />
-      <div className="sketch-pane" style={{ height: `${height * 100}%`, minHeight: MIN_PX, maxHeight: `${MAX_SHARE * 100}%` }}>
-        <Sketch />
-      </div>
-    </>
+    </div>
   );
 }

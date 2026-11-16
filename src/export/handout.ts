@@ -1,4 +1,5 @@
 import type { Combination } from '../model/combination.ts';
+import { touchOf } from '../model/touch.ts';
 import type { Units } from '../model/units.ts';
 import { keySteps } from '../viewer/player.ts';
 import { captionFor, renderStills } from './render.tsx';
@@ -42,13 +43,24 @@ export async function handoutPdf(c: Combination, units: Units, onProgress?: (tex
       y = margin;
     }
     pdf.addImage(pictures[i], 'JPEG', margin, y, pictureWidth, pictureHeight);
-    pdf.setDrawColor(220);
+    pdf.setDrawColor(214, 205, 190);
     pdf.rect(margin, y, pictureWidth, pictureHeight);
     y += pictureHeight + 6;
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(12);
-    pdf.setTextColor(20);
+    pdf.setTextColor(38, 34, 29);
     pdf.text(caption.step, margin, y);
+    // A touch, as the light on the scoring box: red for A, green for B.
+    const touch = touchOf(c.steps[index]);
+    if (touch) {
+      const at = margin + pdf.getTextWidth(caption.step) + 4;
+      if (touch === 'A') pdf.setFillColor(217, 56, 46);
+      else pdf.setFillColor(43, 154, 76);
+      pdf.circle(at, y - 1.4, 1.3, 'F');
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text(`Touch for ${touch}`, at + 2.6, y - 0.3);
+    }
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
     pdf.setTextColor(60);
@@ -58,7 +70,7 @@ export async function handoutPdf(c: Combination, units: Units, onProgress?: (tex
     }
     if (caption.readout) {
       y += 5;
-      pdf.setTextColor(43, 108, 176);
+      pdf.setTextColor(38, 34, 29);
       pdf.text(caption.readout, margin, y);
     }
     y += 9;

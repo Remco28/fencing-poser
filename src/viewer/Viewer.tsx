@@ -10,6 +10,10 @@ import { CameraDriver, Ticker } from '../scene/playback.tsx';
 import { Environment } from '../scene/Environment.tsx';
 import { measure, VIEW_NAMES, viewFor, type ViewName } from '../scene/measure.ts';
 import { ReadoutLines } from '../scene/Readouts.tsx';
+import { touchOf } from '../model/touch.ts';
+import { Icon, PlayIcon } from '../ui/Icon.tsx';
+import { Popover } from '../ui/Popover.tsx';
+import { Switch } from '../ui/Switch.tsx';
 import { PointTrail } from '../scene/PointTrail.tsx';
 import { advance, frameAt, keyAt, keySteps, nextKey, prevKey } from './player.ts';
 
@@ -106,121 +110,149 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  const touch = touchOf(step);
+  const atStart = prevKey(c, pos) === undefined;
+  const atEnd = nextKey(c, pos) === undefined;
+
   return (
     <div className="viewer">
-      <Canvas shadows camera={{ position: [0.6, 2.8, 8.4], fov: 40 }}>
-        <Environment />
-        {FENCERS.map((f) => (
-          <Mannequin
-            key={f}
-            label={f}
-            setup={c.fencers[f]}
-            pose={frame.poses[f]}
-            heading={HEADING[f]}
-            wood={WOOD_OF[f]}
-            targets={(display.targets ?? []).filter((t) => t.fencer === f).flatMap((t) => targetParts(t.area, c.fencers[f]))}
-          />
-        ))}
-        {ghostOf &&
-          FENCERS.map((f) => (
-            <Mannequin key={`ghost-${f}-${ghostOf.id}`} ghost wood={WOOD_OF[f]} setup={c.fencers[f]} pose={ghostOf.poses[f]} heading={HEADING[f]} />
-          ))}
-        {ghostOf && <PointTrail c={c} from={keys[keyIndex - 1]} to={key} />}
-        {m && <ReadoutLines m={m} />}
-        <OrbitControls
-          target={[0, 0.9, 0]}
-          makeDefault
-          maxPolarAngle={Math.PI * 0.495}
-          zoomToCursor
-          enabled={!locked && !(playing && follow)}
-          // Turning the view by hand keeps it there.
-          onStart={() => setView('mine')}
-        />
-        <CameraRig flight={flight} fitAspect />
-        {playing && follow && <CameraDriver fit view={frame.camera ?? viewFor('side', shown)} />}
-        <Ticker onTick={onTick} />
-      </Canvas>
-
-      <header className="viewer-top">
-        <h1>{c.title}</h1>
-        <div className="viewer-top-tools">
-          <div className="toggle" role="radiogroup" aria-label="Playback">
-            <div>
-              {(['steps', 'smooth'] as Mode[]).map((v) => (
-                <button key={v} role="radio" aria-checked={mode === v} className={mode === v ? 'on' : ''} onClick={() => switchMode(v)}>
-                  {v === 'steps' ? 'Steps' : 'Smooth'}
-                </button>
-              ))}
-            </div>
-          </div>
-          <select
-            aria-label="View"
-            value={view}
-            onChange={(e) => chooseView(e.target.value as 'coach' | ViewName)}
-            title="Coach’s view follows each step; any other stays put while it plays"
-          >
-            <option value="coach">Coach’s view</option>
-            {(Object.keys(VIEW_NAMES) as ViewName[]).map((v) => (
-              <option key={v} value={v}>
-                {VIEW_NAMES[v]}
-              </option>
-            ))}
-            {view === 'mine' && <option value="mine">Your view</option>}
-          </select>
-          <button aria-pressed={locked} className={locked ? 'on' : ''} onClick={() => setLocked(!locked)} title="Stop the view moving when you touch the screen">
-            {locked ? 'Unlock view' : 'Lock view'}
-          </button>
-        </div>
-      </header>
-
-      {m && (
-        <dl className="readouts viewer-readouts">
-          <dt>Between front feet</dt>
-          <dd>{formatDistance(m.feet.distance, units)}</dd>
+      <div className="viewer-scene">
+        <Canvas shadows camera={{ position: [0.6, 2.8, 8.4], fov: 40 }}>
+          <Environment />
           {FENCERS.map((f) => (
-            <div key={f}>
-              <dt>
-                {f}’s point to {f === 'A' ? 'B' : 'A'}
-              </dt>
-              <dd className={m.reach[f].distance < 0.01 ? 'touch' : ''}>
-                {m.reach[f].distance < 0.01 ? 'Touch' : formatDistance(m.reach[f].distance, units)}
-              </dd>
-            </div>
+            <Mannequin
+              key={f}
+              setup={c.fencers[f]}
+              pose={frame.poses[f]}
+              heading={HEADING[f]}
+              wood={WOOD_OF[f]}
+              targets={(display.targets ?? []).filter((t) => t.fencer === f).flatMap((t) => targetParts(t.area, c.fencers[f]))}
+            />
           ))}
-        </dl>
-      )}
+          {ghostOf &&
+            FENCERS.map((f) => (
+              <Mannequin key={`ghost-${f}-${ghostOf.id}`} ghost wood={WOOD_OF[f]} setup={c.fencers[f]} pose={ghostOf.poses[f]} heading={HEADING[f]} />
+            ))}
+          {ghostOf && <PointTrail c={c} from={keys[keyIndex - 1]} to={key} />}
+          {m && <ReadoutLines m={m} />}
+          <OrbitControls
+            target={[0, 0.9, 0]}
+            makeDefault
+            maxPolarAngle={Math.PI * 0.495}
+            zoomToCursor
+            enabled={!locked && !(playing && follow)}
+            // Turning the view by hand keeps it there.
+            onStart={() => setView('mine')}
+          />
+          <CameraRig flight={flight} fitAspect />
+          {playing && follow && <CameraDriver fit view={frame.camera ?? viewFor('side', shown)} />}
+          <Ticker onTick={onTick} />
+        </Canvas>
 
-      <section className="viewer-card" aria-live="polite">
-        <p className="viewer-step">
-          Step {keyIndex + 1} of {keys.length}
-          {step.label && <strong> · {step.label}</strong>}
-        </p>
-        {step.notes && <p className="viewer-notes">{step.notes}</p>}
-        <div className="viewer-controls">
-          <button onClick={() => goTo(prevKey(c, pos))} disabled={prevKey(c, pos) === undefined} aria-label="Previous step">
-            ‹ Prev
-          </button>
-          {mode === 'smooth' && (
-            <button className="primary" onClick={play} aria-label={playing ? 'Pause' : 'Play'}>
-              {playing ? '❚❚ Pause' : '▶ Play'}
-            </button>
-          )}
-          <button onClick={next} disabled={nextKey(c, pos) === undefined} aria-label="Next step">
-            Next ›
-          </button>
-          {mode === 'smooth' && (
-            <select aria-label="Speed" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-              <option value={0.25}>¼ speed</option>
-              <option value={0.5}>½ speed</option>
-              <option value={1}>Full speed</option>
-            </select>
-          )}
-        </div>
-        <ol className="viewer-dots" aria-hidden>
+        <header className="viewer-top">
+          <h1>{c.title}</h1>
+          <Popover className="icon round" label={<Icon name="more" />} title="View and speed" align="end" width={250}>
+            <div className="stack">
+              <label className="field">
+                <span>View</span>
+                <select
+                  aria-label="View"
+                  value={view}
+                  onChange={(e) => chooseView(e.target.value as 'coach' | ViewName)}
+                  title="Coach’s view follows each step; any other stays put while it plays"
+                >
+                  <option value="coach">Coach’s view</option>
+                  {(Object.keys(VIEW_NAMES) as ViewName[]).map((v) => (
+                    <option key={v} value={v}>
+                      {VIEW_NAMES[v]}
+                    </option>
+                  ))}
+                  {view === 'mine' && <option value="mine">Your view</option>}
+                </select>
+              </label>
+              <label className="field">
+                <span>Speed when it moves</span>
+                <select aria-label="Speed" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+                  <option value={0.25}>¼ speed</option>
+                  <option value={0.5}>½ speed</option>
+                  <option value={1}>Full speed</option>
+                </select>
+              </label>
+              <div className="switch-list">
+                <Switch on={locked} onToggle={() => setLocked(!locked)} title="Stop the view moving when you touch the screen">
+                  Lock the view
+                </Switch>
+              </div>
+            </div>
+          </Popover>
+        </header>
+
+        {m && (
+          <dl className="readouts card viewer-readouts">
+            <div>
+              <dt>Between front feet</dt>
+              <dd>{formatDistance(m.feet.distance, units)}</dd>
+            </div>
+            {FENCERS.map((f) => (
+              <div key={f}>
+                <dt>
+                  {f}’s point to {f === 'A' ? 'B' : 'A'}
+                </dt>
+                <dd className={m.reach[f].distance < 0.01 ? 'touch' : ''}>
+                  {m.reach[f].distance < 0.01 ? 'Touch' : formatDistance(m.reach[f].distance, units)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+
+      <section className="viewer-panel" aria-live="polite">
+        <ol className="viewer-ticks" aria-hidden>
           {keys.map((k, i) => (
-            <li key={k} className={i === keyIndex ? 'on' : ''} />
+            <li key={k} className={i < keyIndex ? 'done' : i === keyIndex ? 'on' : ''} />
           ))}
         </ol>
+        <p className="viewer-step">
+          <span className="caps">
+            Step {keyIndex + 1} of {keys.length}
+          </span>
+          {touch && (
+            <span className="touch">
+              <span className={`lamp ${touch === 'A' ? 'red' : 'green'}`} /> Touch for {touch}
+            </span>
+          )}
+        </p>
+        {step.label && <h2>{step.label}</h2>}
+        {step.notes && <p className="viewer-notes">{step.notes}</p>}
+        <div className="viewer-controls">
+          <button className="round" onClick={() => goTo(prevKey(c, pos))} disabled={atStart} aria-label="Previous step">
+            <Icon name="back" />
+          </button>
+          {mode === 'smooth' ? (
+            <button className="round main" onClick={play} aria-label={playing ? 'Pause' : 'Play'}>
+              <PlayIcon stop={playing} />
+            </button>
+          ) : (
+            <button className="round main" onClick={atEnd ? () => goTo(keys[0]) : next} aria-label={atEnd ? 'Back to the start' : 'Next step'}>
+              <Icon name={atEnd ? 'loop' : 'forward'} />
+            </button>
+          )}
+          {mode === 'smooth' && (
+            <button className="round" onClick={next} disabled={atEnd} aria-label="Next step">
+              <Icon name="forward" />
+            </button>
+          )}
+        </div>
+        <div className="toggle viewer-mode" role="radiogroup" aria-label="Playback">
+          <div>
+            {(['steps', 'smooth'] as Mode[]).map((v) => (
+              <button key={v} role="radio" aria-checked={mode === v} className={mode === v ? 'on' : ''} onClick={() => switchMode(v)}>
+                {v === 'steps' ? 'Step by step' : 'Smooth'}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
     </div>
   );

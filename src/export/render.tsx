@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FENCERS, HEADING, targetParts, type Combination, type StepCamera } from '../model/combination.ts';
 import { formatDistance, type Units } from '../model/units.ts';
-import { WOOD_OF } from '../design.ts';
+import { FONT_TITLE, FONT_UI, INK, INK_SOFT, WOOD_OF } from '../design.ts';
 import { Mannequin } from '../rig/Mannequin.tsx';
 import { Environment } from '../scene/Environment.tsx';
 import { measure, viewFor } from '../scene/measure.ts';
@@ -152,29 +152,29 @@ export function drawCaption(g: CanvasRenderingContext2D, caption: Caption, width
   const pad = Math.round(width * 0.02);
   const big = Math.round(width * 0.022);
   const small = Math.round(width * 0.015);
-  g.font = `${small}px system-ui, sans-serif`;
+  g.font = `${small}px ${FONT_UI}`;
   const notes = withNotes && caption.notes ? wrap(g, caption.notes, width - pad * 2).slice(0, 3) : [];
   const lines = 1 + notes.length + (caption.readout ? 1 : 0);
   const band = pad * 2 + big * 1.3 + (lines - 1) * small * 1.4 + small * 1.4;
-  g.fillStyle = 'rgba(255,255,255,0.9)';
+  g.fillStyle = 'rgba(251,248,242,0.94)';
   g.fillRect(0, height - band, width, band);
   let y = height - band + pad + small;
-  g.fillStyle = '#646b73';
-  g.font = `${small}px system-ui, sans-serif`;
+  g.fillStyle = INK_SOFT;
+  g.font = `${small}px ${FONT_UI}`;
   g.fillText(caption.title, pad, y);
   y += big * 1.3;
-  g.fillStyle = '#1f2328';
-  g.font = `600 ${big}px system-ui, sans-serif`;
+  g.fillStyle = INK;
+  g.font = `500 ${big}px ${FONT_TITLE}`;
   g.fillText(caption.step, pad, y);
-  g.font = `${small}px system-ui, sans-serif`;
-  g.fillStyle = '#3c4248';
+  g.font = `${small}px ${FONT_UI}`;
+  g.fillStyle = INK_SOFT;
   for (const line of notes) {
     y += small * 1.4;
     g.fillText(line, pad, y);
   }
   if (caption.readout) {
     y += small * 1.4;
-    g.fillStyle = '#2b6cb0';
+    g.fillStyle = INK;
     g.fillText(caption.readout, pad, y);
   }
 }
@@ -185,7 +185,8 @@ export async function captionedPicture(c: Combination, index: number, units: Uni
   const [url] = await renderStills(c, [index], size);
   const img = new Image();
   img.src = url;
-  await img.decode();
+  // The caption is drawn in the page's own type; make sure it has arrived.
+  await Promise.all([img.decode(), document.fonts.load(`500 20px ${FONT_TITLE}`), document.fonts.load(`20px ${FONT_UI}`)]);
   const canvas = Object.assign(document.createElement('canvas'), size);
   const g = canvas.getContext('2d')!;
   g.drawImage(img, 0, 0);

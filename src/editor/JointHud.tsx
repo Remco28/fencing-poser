@@ -25,6 +25,8 @@ export function HudTracker(props: {
   avoid: Vector3[];
   el: RefObject<HTMLDivElement | null>;
   leader: RefObject<SVGLineElement | null>;
+  /** The part of the window the controls must stay inside (the rest is under a panel). */
+  within?: () => { left: number; top: number; width: number; height: number };
 }) {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
@@ -47,15 +49,17 @@ export function HudTracker(props: {
     const maxX = Math.max(joint.x, ...screen.map((p) => p.x));
     const w = box.offsetWidth;
     const h = box.offsetHeight;
+    const area = props.within?.() ?? { left: 0, top: 0, width: size.width, height: size.height };
+    const edge = { left: area.left + 12, right: area.left + area.width - 12, top: area.top + 8, bottom: area.top + area.height - 8 };
     // Beside the fencer on whichever side has room, nearer the joint's side first.
-    const rightRoom = size.width - 12 - (maxX + GAP + w);
-    const leftRoom = minX - GAP - w - 12;
+    const rightRoom = edge.right - (maxX + GAP + w);
+    const leftRoom = minX - GAP - w - edge.left;
     const preferRight = joint.x - minX > maxX - joint.x;
     let left: number;
     if (preferRight ? rightRoom >= 0 : leftRoom < 0 && rightRoom >= 0) left = maxX + GAP;
     else if (leftRoom >= 0) left = minX - GAP - w;
-    else left = rightRoom > leftRoom ? size.width - w - 12 : 12;
-    const top = Math.min(Math.max(64, joint.y - h / 2), size.height - h - 90);
+    else left = rightRoom > leftRoom ? edge.right - w : edge.left;
+    const top = Math.max(edge.top, Math.min(joint.y - h / 2, edge.bottom - h));
     box.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
     box.style.visibility = 'visible';
     if (line) {

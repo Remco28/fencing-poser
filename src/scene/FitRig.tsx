@@ -11,12 +11,16 @@ export function FitRig({
   request,
   points,
   onView,
+  clear,
 }: {
   request: { id: number } | null;
   points: () => Vector3[];
   onView: (camera: StepCamera) => void;
+  /** The part of the window not under a panel, when that is less than all of it. */
+  clear?: () => { width: number; height: number } | null;
 }) {
   const camera = useThree((s) => s.camera) as PerspectiveCamera;
+  const size = useThree((s) => s.size);
   const controls = useThree((s) => s.controls) as unknown as { target: Vector3 } | null;
 
   useEffect(() => {
@@ -27,8 +31,11 @@ export function FitRig({
     const back = camera.position.clone().sub(controls.target).normalize();
     const right = new Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
     const up = new Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
-    const tanV = Math.tan((camera.fov * Math.PI) / 360);
-    const tanH = tanV * camera.aspect;
+    // Fit into the clear part of the window, which may be smaller than the whole picture.
+    const open = clear?.() ?? size;
+    const tan = Math.tan((camera.fov * Math.PI) / 360);
+    const tanV = (tan * open.height) / size.height;
+    const tanH = (tan * open.width) / size.height;
     // Each point needs the camera far enough back that it falls inside both edges of the view.
     let distance = 0;
     for (const p of pts) {
