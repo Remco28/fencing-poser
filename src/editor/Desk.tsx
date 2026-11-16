@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type RefObject } from 'react';
 import type { Combination } from '../model/combination.ts';
 import { loadCombination, type LibraryEntry } from '../library/storage.ts';
 import { Icon } from '../ui/Icon.tsx';
+import { Popover } from '../ui/Popover.tsx';
 import { keySteps } from '../viewer/player.ts';
 import { useEditor } from './store.ts';
 import { useThumbnail } from './thumbs.tsx';
@@ -21,8 +22,8 @@ function when(iso: string): string {
 /**
  * The opening view: the figures on the desk, and beside them the coach's
  * combinations. Pick one (or the figures themselves) and the view moves in
- * to work on it. Keeping the library in order (folders, backups, deleting)
- * is one step further away, under Manage.
+ * to work on it. Each one can be renamed, duplicated or deleted where it is,
+ * under its ⋯; folders and backups are one step further away, under Manage.
  */
 export function Desk({ clear, onManage }: { clear: RefObject<HTMLDivElement | null>; onManage: () => void }) {
   const s = useEditor();
@@ -47,6 +48,10 @@ export function Desk({ clear, onManage }: { clear: RefObject<HTMLDivElement | nu
   };
   const fresh = () => {
     s.createCombination();
+    leave();
+  };
+  const duplicate = async (id: string) => {
+    await s.duplicateCombination(id);
     leave();
   };
   const none = s.loaded && s.library.length === 0;
@@ -90,7 +95,7 @@ export function Desk({ clear, onManage }: { clear: RefObject<HTMLDivElement | nu
             )}
             <ul className="desk-list">
               {shown.map((c) => (
-                <Row key={c.id} entry={c} current={c.id === s.combination.id} live={c.id === s.combination.id ? s.combination : null} onOpen={() => void open(c.id)} />
+                <Row key={c.id} entry={c} current={c.id === s.combination.id} live={c.id === s.combination.id ? s.combination : null} onOpen={() => void open(c.id)} onDuplicate={() => void duplicate(c.id)} />
               ))}
               {shown.length === 0 && <li className="hint">Nothing matches.</li>}
             </ul>
@@ -124,7 +129,14 @@ export function Desk({ clear, onManage }: { clear: RefObject<HTMLDivElement | nu
   );
 }
 
-function Row({ entry: c, current, live, onOpen }: { entry: LibraryEntry; current: boolean; live: Combination | null; onOpen: () => void }) {
+function Row({ entry: c, current, live, onOpen, onDuplicate }: { entry: LibraryEntry; current: boolean; live: Combination | null; onOpen: () => void; onDuplicate: () => void }) {
+  const [renaming, setRenaming] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const title = c.title || 'Untitled';
+  const rename = (name: string) => {
+    setRenaming(false);
+    void useEditor.getState().renameCombination(c.id, name);
+  };
   // The picture is of the last step: where the phrase ends is what tells combinations apart.
   const [saved, setSaved] = useState<Combination | null>(null);
   useEffect(() => {
@@ -139,17 +151,67 @@ function Row({ entry: c, current, live, onOpen }: { entry: LibraryEntry; current
   const picture = useThumbnail(full?.fencers ?? null, end?.poses ?? null);
   return (
     <li>
-      <button className={`combo${current ? ' on' : ''}`} onClick={onOpen} title={c.labels.length ? c.labels.join(' → ') : undefined}>
-        <span className="pic">{picture && <img src={picture} alt="" draggable={false} />}</span>
-        <span className="text">
-          <strong>{c.title || 'Untitled'}</strong>
-          <span>
-            {c.steps} step{c.steps === 1 ? '' : 's'} · {when(c.updatedAt)}
-            {c.collection ? ` · ${c.collection}` : ''}
-            {current ? ' · open' : ''}
+      {renaming ? (
+        <div className="combo-rename">
+          <span className="pic">{picture && <img src={picture} alt="" draggable={false} />}</span>
+          <input
+            autoFocus
+            aria-label="Combination title"
+            defaultValue={c.title}
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') rename(e.currentTarget.value);
+              if (e.key === 'Escape') setRenaming(false);
+            }}
+            onBlur={(e) => rename(e.currentTarget.value)}
+          />
+        </div>
+      ) : (
+        <button className={`combo${current ? ' on' : ''}`} onClick={onOpen} title={c.labels.length ? c.labels.join(' → ') : undefined}>
+          <span className="pic">{picture && <img src={picture} alt="" draggable={false} />}</span>
+          <span className="text">
+            <strong>{title}</strong>
+            <span>
+              {c.steps} step{c.steps === 1 ? '' : 's'} · {when(c.updatedAt)}
+              {c.collection ? ` · ${c.collection}` : ''}
+              {current ? ' · open' : ''}
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      )}
+      <Popover className="icon" label={<Icon name="more" />} title={`Rename, duplicate or delete “${title}”`} align="end" width={230} onOpenChange={() => setConfirm(false)}>
+        {(close) =>
+          confirm ? (
+            <div className="step-card">
+              <p>Delete “{title}” for good? This cannot be undone.</p>
+              <div className="buttons">
+                <button
+                  className="danger-solid"
+                  onClick={() => {
+                    close();
+                    void useEditor.getState().removeCombination(c.id);
+                  }}
+                >
+                  Delete
+                </button>
+                <button onClick={() => setConfirm(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div className="menu-list">
+              <button onClick={() => (close(), setRenaming(true))}>
+                <Icon name="pencil" /> Rename
+              </button>
+              <button onClick={() => (close(), onDuplicate())} title="A copy to change, leaving this one as it is">
+                <Icon name="note" /> Duplicate and open
+              </button>
+              <button className="danger" onClick={() => setConfirm(true)}>
+                <Icon name="trash" /> Delete…
+              </button>
+            </div>
+          )
+        }
+      </Popover>
     </li>
   );
 }

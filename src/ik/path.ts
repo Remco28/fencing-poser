@@ -1,10 +1,10 @@
 import { Matrix3, type Vector3 } from 'three';
 import { HEADING, type Combination, type FencerId, type Pin } from '../model/combination.ts';
 import { clampDof, JOINT_NAMES, type JointName } from '../model/joints.ts';
-import { curvePose, ease, tweenPose } from '../model/tween.ts';
+import { ease } from '../model/tween.ts';
 import { angle, type Pose } from '../model/types.ts';
 import { solveRig } from '../rig/kinematics.ts';
-import { frameAt } from '../viewer/player.ts';
+import { frameAt, plainMove } from '../viewer/player.ts';
 import { pointTo } from './blades.ts';
 
 // Shaping a movement: the coach drags the point's path, pinning it in up to
@@ -30,11 +30,7 @@ export function pathPoint(
 
 /** `at` through the movement into step `to`, with no pins. */
 function natural(c: Combination, to: number, f: FencerId, at: number): Pose {
-  const a = c.steps[to - 1].poses[f];
-  const b = c.steps[to].poses[f];
-  const via = c.steps[to].via?.[f];
-  const k = ease(at);
-  return via ? curvePose(a, via, b, k) : tweenPose(a, b, k);
+  return plainMove(c, to, f, ease(at));
 }
 
 /** How far an arm moved from `a` to `b`: the sum of every joint's turn, in degrees. */

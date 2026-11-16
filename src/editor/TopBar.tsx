@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { FencerId } from '../model/combination.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { Popover } from '../ui/Popover.tsx';
@@ -5,7 +6,7 @@ import { Switch } from '../ui/Switch.tsx';
 import { Toggle } from '../ui/Toggle.tsx';
 import { HistoryList } from './HistoryList.tsx';
 import { STEP } from './keyboard.ts';
-import { currentStep, hasShot, useEditor, viewIsShot } from './store.ts';
+import { currentStep, studentsView, useEditor, viewIsShot, viewsDiffer } from './store.ts';
 import { useUi } from './ui.ts';
 import { lookAt } from './views.ts';
 
@@ -13,8 +14,6 @@ import { lookAt } from './views.ts';
 export function TopBar(props: { onShare: () => void; onLibrary: () => void; onTour: () => void }) {
   const s = useEditor();
   const posing = useUi((u) => u.posing);
-  const playing = !!s.preview;
-  const still = s.cameraLocked || playing;
   const behind: FencerId = s.active;
 
   return (
@@ -30,6 +29,7 @@ export function TopBar(props: { onShare: () => void; onLibrary: () => void; onTo
           size={Math.max(8, Math.min(40, s.combination.title.length + 1))}
           onChange={(e) => s.setTitle(e.target.value)}
         />
+        <CombinationMenu />
         <span className="divider" />
         {s.folder && !s.folder.ready ? (
           <button className="link" onClick={props.onLibrary}>
@@ -44,23 +44,22 @@ export function TopBar(props: { onShare: () => void; onLibrary: () => void; onTo
 
       <div className="top-right">
         <div className="bar card" role="toolbar" aria-label="View">
-          <button className="flat" onClick={() => s.requestView(lookAt('side'))} disabled={still} title="Look from the side">
+          <button className="flat" onClick={() => s.requestView(lookAt('side'))} title="Look from the side">
             Side
           </button>
-          <button className="flat" onClick={() => s.requestView(lookAt('above'))} disabled={still} title="Look from above">
+          <button className="flat" onClick={() => s.requestView(lookAt('above'))} title="Look from above">
             Above
           </button>
           {posing && (
             <button
               className="flat"
               onClick={() => s.requestView(lookAt(behind === 'A' ? 'behindA' : 'behindB'))}
-              disabled={still}
               title={`Look over ${behind}’s shoulder`}
             >
               Behind {behind}
             </button>
           )}
-          <button className="flat" onClick={() => s.requestFit('both')} disabled={still} title="Bring both fencers into view (Z)">
+          <button className="flat" onClick={() => s.requestFit('both')} title="Bring both fencers into view (Z)">
             Fit
           </button>
           <span className="divider" />
@@ -109,7 +108,7 @@ function ShowMenu() {
       className="flat"
       label={
         <>
-          <Icon name={s.cameraLocked ? 'lock' : 'eye'} /> Show
+          <Icon name="eye" /> Show
         </>
       }
       title="What is drawn in the view"
@@ -134,24 +133,16 @@ function ShowMenu() {
         <Switch on={s.handles} onToggle={s.toggleHandles} title="The dots to drag on the fencer being posed (H)">
           Dots to drag
         </Switch>
-        <hr />
-        <Switch on={s.cameraLocked} onToggle={s.toggleCameraLock} title="When on, the view cannot be moved by accident (L)">
-          Lock the view
-        </Switch>
       </div>
     </Popover>
   );
 }
 
-/** Where students see each step from: chosen on purpose, never by looking around. */
+/** The one view students watch the combination from: chosen on purpose, never by looking around. */
 function StudentsMenu() {
   const s = useEditor();
-  const step = currentStep(s);
   const onShot = viewIsShot(s);
-  const chosen = hasShot(step);
-  const playing = !!s.preview;
-  const all = !!s.combination.sharedView;
-  const what = all ? 'every step' : `step ${s.stepIndex + 1}`;
+  const chosen = !!studentsView(s.combination);
   return (
     <Popover
       className="flat"
@@ -161,37 +152,99 @@ function StudentsMenu() {
           Students’ view
         </>
       }
-      title="Where students see this step from"
+      title="Where students watch the combination from"
       align="end"
       width={300}
     >
-      <p className="hint">
-        Students see {what} from the view you choose here. Looking around while you work never changes it.{' '}
-        {chosen ? '' : 'Nothing chosen yet: they get the side view.'}
-      </p>
-      <div className="stack">
-        <button className="primary" onClick={s.setShot} disabled={playing || onShot}>
-          {onShot ? (
-            <>
-              <Icon name="check" /> Students see {what} from here
-            </>
-          ) : (
-            <>Use this view for {what}</>
-          )}
-        </button>
-        <button onClick={s.showShot} disabled={playing || s.cameraLocked || onShot || !chosen}>
-          Go to the students’ view
-        </button>
-        <button className="quiet" onClick={s.clearShot} disabled={playing || !chosen}>
-          Back to the side view for students
-        </button>
-      </div>
-      <hr />
-      <div className="switch-list">
-        <Switch on={all} onToggle={s.toggleSharedView} title="When on, students see every step from the same view">
-          One view for all steps
-        </Switch>
-      </div>
+      {(close) => (
+        <>
+          <p className="hint">
+            Students watch the whole combination from one view. Turn to where they should watch from, then press the button. Your own view
+            never moves by itself. {chosen ? '' : 'Nothing chosen yet: they get the side view.'}
+            {chosen && viewsDiffer(s.combination) ? ' This combination still has a different view on some steps, from before: choosing one here replaces them all.' : ''}
+          </p>
+          <div className="stack">
+            <button className="primary" onClick={() => (s.setShot(), close())} disabled={onShot}>
+              {onShot ? (
+                <>
+                  <Icon name="check" /> Students watch from here
+                </>
+              ) : (
+                <>Students watch from here</>
+              )}
+            </button>
+            <button onClick={() => (s.showShot(), close())} disabled={onShot || !chosen}>
+              Show me the students’ view
+            </button>
+            <button className="quiet" onClick={() => (s.clearShot(), close())} disabled={!chosen}>
+              Back to the side view for students
+            </button>
+          </div>
+        </>
+      )}
+    </Popover>
+  );
+}
+
+/** Beside the title: what can be done with the whole combination, and the way to another one, without going back to the desk. */
+function CombinationMenu() {
+  const s = useEditor();
+  const [confirm, setConfirm] = useState(false);
+  const others = s.library.filter((c) => c.id !== s.combination.id).slice(0, 8);
+  return (
+    <Popover className="icon" label={<Icon name="more" />} title="New, duplicate, delete, or open another combination" width={300} onOpenChange={() => setConfirm(false)}>
+      {(close) =>
+        confirm ? (
+          <div className="step-card">
+            <p>Delete “{s.combination.title || 'Untitled'}” for good? This cannot be undone.</p>
+            <div className="buttons">
+              <button
+                className="danger-solid"
+                onClick={() => {
+                  close();
+                  void s.removeCombination(s.combination.id);
+                  useUi.getState().goToDesk();
+                }}
+              >
+                Delete
+              </button>
+              <button onClick={() => setConfirm(false)}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="menu-list">
+              <button onClick={() => (close(), s.createCombination())}>
+                <Icon name="plus" /> New combination
+              </button>
+              <button onClick={() => (close(), void s.duplicateCombination())} title="A copy to change, leaving this one as it is">
+                <Icon name="note" /> Duplicate this one
+              </button>
+              <button className="danger" onClick={() => setConfirm(true)}>
+                <Icon name="trash" /> Delete this one…
+              </button>
+            </div>
+            {others.length > 0 && (
+              <>
+                <hr />
+                <h2 className="caps">Open another</h2>
+                <div className="menu-list">
+                  {others.map((c) => (
+                    <button key={c.id} onClick={() => (close(), void s.openCombination(c.id))} title={c.labels.length ? c.labels.join(' → ') : undefined}>
+                      {c.title || 'Untitled'}
+                    </button>
+                  ))}
+                </div>
+                {s.library.length - 1 > others.length && (
+                  <button className="link" onClick={() => (close(), useUi.getState().goToDesk())}>
+                    All {s.library.length} combinations
+                  </button>
+                )}
+              </>
+            )}
+          </>
+        )
+      }
     </Popover>
   );
 }
@@ -251,8 +304,6 @@ function Help({ onTour }: { onTour: () => void }) {
         <dd>Show / hide the dots to drag</dd>
         <dt>Z / Shift+Z</dt>
         <dd>Fit both fencers / the one being posed</dd>
-        <dt>L</dt>
-        <dd>Lock / unlock the view</dd>
         <dt>Esc</dt>
         <dd>Let go: of the joint, then of the fencer</dd>
       </dl>

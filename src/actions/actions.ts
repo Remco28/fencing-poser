@@ -385,6 +385,17 @@ function beat(c: Combination, poses: Poses, f: FencerId, line: Line): Poses | nu
   return layAgainst(c, knocked, opp, side.clone().negate(), 'foible', 0.9, 0.15);
 }
 
+/**
+ * Bring the blades together where they are: `f`'s blade is laid against the
+ * opponent's, which does not move, so that the opponent's blade lies on
+ * `f`'s inside or outside. Only `f`'s wrist turns, and the hand a little if
+ * it must. Null when the blades are too far apart to meet.
+ */
+export function touchBlades(c: Combination, poses: Poses, f: FencerId, where: 'inside' | 'outside'): Poses | null {
+  const out = outsideOf(c, f);
+  return layAgainst(c, poses, other(f), where === 'outside' ? out.negate() : out, 'foible', 0.9, 0.15);
+}
+
 // Hit ------------------------------------------------------------------------
 
 /** Did a hit fall short because the target is too near, not too far? The point has gone past it, or it is nearer than the blade is long. */

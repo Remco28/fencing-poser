@@ -999,6 +999,22 @@ input.title:hover {
   flex: 1;
 }
 
+/* The coach's own saved poses, at the foot of the tray. */
+.presets.mine {
+  margin-top: 12px;
+}
+
+.presets.mine .pose-list {
+  gap: 5px;
+  max-height: 138px;
+  margin-bottom: 8px;
+  overflow-y: auto;
+}
+
+.presets.mine .message {
+  margin: 0 0 8px;
+}
+
 /* Ready-made poses, in the card that opens beside the tray. */
 .presets .toggle {
   margin: 6px 0;
@@ -2045,6 +2061,44 @@ button.add-step:hover:not(:disabled) {
 
 .desk-list .hint {
   padding: 8px;
+}
+
+/* Each combination's own ⋯ (rename, duplicate, delete), at the right of its row. */
+.desk-list li {
+  position: relative;
+}
+
+.desk-list li > .popover {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+}
+
+.desk-list button.combo {
+  padding-right: 44px;
+}
+
+.combo-rename {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 44px 8px 8px;
+}
+
+.combo-rename .pic {
+  flex: none;
+  width: 112px;
+  height: 60px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--air);
+  overflow: hidden;
+}
+
+.combo-rename input {
+  flex: 1;
+  min-width: 0;
 }
 
 button.combo {

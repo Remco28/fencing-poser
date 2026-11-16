@@ -2,6 +2,8 @@ import type { Combination, FencerId, Pin, Step, StepCamera } from '../model/comb
 import { clampDof, type JointName } from '../model/joints.ts';
 import { curvePose, ease, stepDuration, tweenCamera, tweenPose } from '../model/tween.ts';
 import type { Pose } from '../model/types.ts';
+import { HEADING } from '../model/combination.ts';
+import { stepping } from './gait.ts';
 
 // Playback runs along a position measured in steps: 2 is exactly step 3,
 // 2.5 is halfway from step 3 to step 4. A movement can be bent (see Step.pins);
@@ -27,15 +29,24 @@ export function frameAt(c: Combination, pos: number): Frame {
   const b = c.steps[i + 1];
   if (!b || t < EPS) return { poses: a.poses, camera: a.camera };
   const k = ease(t);
-  const move = (f: FencerId) => {
-    const via = b.via?.[f];
-    const natural = via ? curvePose(a.poses[f], via, b.poses[f], k) : tweenPose(a.poses[f], b.poses[f], k);
-    return bent(natural, pinsOf(b, f), k);
-  };
+  const move = (f: FencerId) => bent(plainMove(c, i + 1, f, k), pinsOf(b, f), k);
   return {
     poses: { A: move('A'), B: move('B') },
     camera: tweenCamera(a.camera, b.camera, k),
   };
+}
+
+/**
+ * A fencer's pose `k` (eased, 0 to 1) of the way into step `to`, before any
+ * bends the coach gave the path: every joint turned evenly, and the feet
+ * stepping rather than skating (see gait.ts).
+ */
+export function plainMove(c: Combination, to: number, f: FencerId, k: number): Pose {
+  const a = c.steps[to - 1].poses[f];
+  const b = c.steps[to].poses[f];
+  const via = c.steps[to].via?.[f];
+  const natural = via ? curvePose(a, via, b, k) : tweenPose(a, b, k);
+  return stepping(c.fencers[f], HEADING[f], a, b, natural, k);
 }
 
 /** The key step being shown: the last one at or before `pos`. */

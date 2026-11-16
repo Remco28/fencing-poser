@@ -4,7 +4,7 @@ import { Icon, PlayIcon } from '../ui/Icon.tsx';
 import { Popover } from '../ui/Popover.tsx';
 import { touchOf } from '../model/touch.ts';
 import { keyAt } from '../viewer/player.ts';
-import { hasShot, useEditor } from './store.ts';
+import { useEditor } from './store.ts';
 import { useThumbnail } from './thumbs.tsx';
 
 /**
@@ -114,11 +114,6 @@ function Shot(props: { step: Step; index: number; on: boolean; current: boolean;
       >
         {picture && <img src={picture} alt="" draggable={false} />}
         {touch && <span className={`lamp ${touch === 'A' ? 'red' : 'green'}`} title={`${touch} hits`} />}
-        {hasShot(step) && (
-          <span className="badge" title="Students see this step from a view you chose">
-            <Icon name="eye" />
-          </span>
-        )}
       </button>
       <div className="cap">
         <b>{index + 1}</b>

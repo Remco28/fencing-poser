@@ -5,7 +5,7 @@ const KEY = 'fencing-poser.toured';
 const CARDS: { title: string; body: string }[] = [
   {
     title: 'Pick up a fencer',
-    body: 'Click one of the wooden figures. Its tray opens with everything that fencer can do, and dots appear on the hands, feet, hips and point: drag one and the body follows. Click a body part for fine control of that joint.',
+    body: 'Click one of the wooden figures. Dots appear on the hands, feet, hips and point: drag one and the body follows. Click a body part for fine control of that joint. The tray beside them chooses what stays still while you drag, and keeps the poses you save.',
   },
   {
     title: 'Sketch it flat',
@@ -13,7 +13,7 @@ const CARDS: { title: string; body: string }[] = [
   },
   {
     title: 'Build the phrase',
-    body: 'In the tray, pick what the fencer does next: a distance, footwork, a parry, a hit. With “New step for each action” on, each click adds a picture to the row along the bottom. Press Play (or Space) to watch it move.',
+    body: 'Pose the two fencers, then press New step: it starts from the pose you have, ready to change. Each step is a picture in the row along the bottom. Press Play (or Space) to watch them move from one to the next: the feet step by themselves.',
   },
   {
     title: 'Hand it to your students',

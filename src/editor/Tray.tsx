@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { FENCERS, type FencerId } from '../model/combination.ts';
 import { formatHeight } from '../model/units.ts';
 import { Icon } from '../ui/Icon.tsx';
-import { Popover } from '../ui/Popover.tsx';
 import { Toggle } from '../ui/Toggle.tsx';
 import { ActionsPanel } from './ActionsPanel.tsx';
 import { PresetsPanel } from './PresetsPanel.tsx';
@@ -11,15 +10,14 @@ import { useUi } from './ui.ts';
 
 /**
  * Everything for the fencer being posed, and nothing else: who they are, what
- * they do next, ready-made poses, and what stays still while they are dragged.
- * It shows only while a fencer is picked.
+ * stays still while they are dragged, help with the blade, and the coach's
+ * own saved poses. It shows only while a fencer is picked.
  */
 export function Tray() {
   const s = useEditor();
   const [setup, setSetup] = useState(false);
   const me = s.active;
   const who = s.combination.fencers[me];
-  const mine = s.presets.filter((p) => !p.builtIn).length;
 
   return (
     <aside className="tray card" aria-label={`Fencer ${me}`}>
@@ -40,26 +38,6 @@ export function Tray() {
       </p>
       {setup && <FencerSetup fencer={me} />}
 
-      <ActionsPanel />
-
-      <div className="tray-row">
-        <Popover
-          className="row-button"
-          side="right"
-          width={360}
-          title={`Ready-made poses for ${me}`}
-          label={
-            <>
-              <span>Poses</span>
-              <span className="count">{mine ? `${s.presets.length - mine} ready, ${mine} of yours` : `${s.presets.length} ready`}</span>
-              <Icon name="forward" />
-            </>
-          }
-        >
-          <PresetsPanel />
-        </Popover>
-      </div>
-
       <div className="tray-row keep" role="group" aria-label="Keep still while dragging">
         <span className="caps" title="What stays where it is while you drag anything else">
           Keep still
@@ -74,6 +52,9 @@ export function Tray() {
           Point
         </button>
       </div>
+
+      <ActionsPanel />
+      <PresetsPanel />
     </aside>
   );
 }

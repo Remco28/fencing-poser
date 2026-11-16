@@ -178,7 +178,6 @@ function PathBanner() {
 function Prompt({ posing }: { posing: boolean }) {
   const running = useEditor((s) => !!s.preview?.playing);
   const idle = useEditor((s) => !s.preview && !s.pathEdit);
-  const locked = useEditor((s) => s.cameraLocked);
   const stop = useEditor((s) => s.stopPreview);
   // Why a step along the piste stopped short, when no joint's controls are open to say so.
   const heldBack = useEditor((s) => (s.selected ? null : s.heldBack));
@@ -193,12 +192,6 @@ function Prompt({ posing }: { posing: boolean }) {
     return (
       <p className="prompt" role="status">
         {heldBack}
-      </p>
-    );
-  if (locked)
-    return (
-      <p className="prompt">
-        View locked · <kbd>L</kbd> unlocks
       </p>
     );
   return posing ? null : <p className="prompt">Click a fencer to pose them</p>;

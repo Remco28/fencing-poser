@@ -71,7 +71,6 @@ export function useKeyboardPosing() {
       if (key === 'n') return s.addStep();
       if (key === 'h') return s.toggleHandles();
       if (key === 'k') return s.toggleSketch();
-      if (key === 'l') return s.toggleCameraLock();
       if (key === 'z') return s.requestFit(e.shiftKey ? s.active : 'both');
       if (key === ',' || key === '<') return s.goToStep(s.stepIndex - 1);
       if (key === '.' || key === '>') return s.goToStep(s.stepIndex + 1);

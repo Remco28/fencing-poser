@@ -40,17 +40,14 @@ import {
 } from '../model/combination.ts';
 import { clampDof, JOINT_BY_NAME, JOINTS, oppositeJoint, type JointName } from '../model/joints.ts';
 import { mirrorPose } from '../model/mirror.ts';
-import { tweenPose } from '../model/tween.ts';
 import { angle, type FencerSetup, type Pose } from '../model/types.ts';
-import type { PresetPose } from '../presets/builtin.ts';
+import { BUILT_IN_PRESETS, type PresetPose } from '../presets/builtin.ts';
 import { advance, keyAt } from '../viewer/player.ts';
 import { pushBlades } from '../ik/blades.ts';
-import { ACTION_LABELS, actionLabel, applyAction, shapePath, type Action, type Cramped, type HitWith, type PathShape } from '../actions/actions.ts';
+import { applyAction, shapePath, touchBlades, type PathShape } from '../actions/actions.ts';
 import { DEFAULT_KEEP, editKept, keptInSlide, keptThrough, placesOf, spotsOf, withSpots, type Keep, type Kept, type Spots } from '../ik/drag.ts';
 import type { SketchView } from '../sketch/project.ts';
-import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type PosePart, type ShownPreset } from '../presets/library.ts';
-
-export type PresetPart = PosePart;
+import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type ShownPreset } from '../presets/library.ts';
 
 /** The flat stick-figure strip under the 3D view. */
 export interface SketchState {
@@ -127,11 +124,6 @@ interface EditorState extends Snapshot {
   /** Modifier keys currently held, shown in the controls. */
   held: { shift: boolean; alt: boolean };
   setHeld: (held: { shift: boolean; alt: boolean }) => void;
-  /** Locked: the camera cannot be orbited, panned or zoomed by hand. */
-  cameraLocked: boolean;
-  toggleCameraLock: () => void;
-  /** Turn "one view for all steps" on (every step takes this step's view) or off. */
-  toggleSharedView: () => void;
   /**
    * Playing the combination smoothly inside the editor, or paused at a point
    * between steps while scrubbing; null when editing.
@@ -169,45 +161,25 @@ interface EditorState extends Snapshot {
   advance: (metres: number) => void;
   setPosition: (x: number) => void;
   resetJoint: (joint: JointName) => void;
-  /** Apply a preset to the other fencer, without switching to them. */
-  applyPresetToOther: (preset: PresetPose) => void;
   /**
-   * The posing fencer performs a named action (one undo step). Names the step
-   * for it and highlights a target that is hit. Says how far short a hit fell
-   * in metres (and whether that was from being too close), or that the blades
-   * were too far apart to meet, in which case nothing changed.
+   * Bring the posing fencer's point to a target on the opponent, with the
+   * arm alone (the feet stay). Says how far short it fell, in metres, and
+   * whether that was from being too close.
    */
-  act: (action: Action) => { short: number; close: boolean; apart: boolean; cramped?: Cramped };
-  /** Each action (but a distance) is added as a new step after the current one. Remembered. */
-  actionsNewStep: boolean;
-  toggleActionsNewStep: () => void;
-  /** What the Hit buttons hit with (for the session). */
-  hitWith: HitWith;
-  setHitWith: (hitWith: HitWith) => void;
+  pointTo: (area: TargetArea) => { short: number; close: boolean };
+  /** Lay the posing fencer's blade against the opponent's, with the opponent's on their inside or outside. False (and nothing changes) when the blades are too far apart. */
+  touchBlades: (where: 'inside' | 'outside') => boolean;
   /** Send the posing fencer's point under or over the opponent's blade on the way into this step, or straight ('direct'). */
   shapeActivePath: (shape: PathShape) => void;
-  /** Apply a preset to the whole body, or only the upper body or the legs. */
-  applyPreset: (preset: PresetPose, part?: PresetPart) => void;
-  presetPart: PresetPart;
-  setPresetPart: (part: PresetPart) => void;
-  /**
-   * The last pose click, kept so it can be dialled back ("halfway to a
-   * lunge"). It holds only while both fencers are exactly as that click (or
-   * the dial) left them; see `poseDial`.
-   */
-  dial: Dial | null;
-  /** How far the last pose click is applied: 0 = the pose before it, 1 = all of it. One undo step with the click. */
-  setPoseAmount: (amount: number) => void;
-  /**
-   * Give the posing fencer the pose a fencer had in another step (their own
-   * unless `from` names the other, whose pose is mirrored as needed). Like
-   * any pose: the part chosen, where they stand kept, and it can be dialled.
-   */
-  applyStepPose: (stepIndex: number, from?: FencerId) => void;
+  /** Give the posing fencer a saved pose, whole, where they stand. */
+  applyPreset: (preset: PresetPose) => void;
+  /** Back to the plain en garde, where they stand. */
+  resetPose: () => void;
   /**
    * The view the coach is working in: wherever the camera was last left.
-   * Editor state only. What students see for a step (its "shot",
-   * `step.camera`) is set on purpose with `setShot`, never by looking around.
+   * Editor state only, and the camera never moves unless the coach moves it,
+   * playing or not. Students watch the whole combination from one view,
+   * chosen on purpose with `setShot` (see `studentsView`).
    */
   view: StepCamera | null;
   /** The camera reports where it has come to rest (after a turn by hand, or a flight). */
@@ -215,11 +187,11 @@ interface EditorState extends Snapshot {
   /** Where the camera should fly next (a chosen view, the step's shot, back from playing). */
   flight: { camera: StepCamera; id: number; save: boolean } | null;
   requestView: (camera: StepCamera) => void;
-  /** Use the working view as what students see for this step (for every step, with one view for all). */
+  /** Students watch the whole combination from the view the coach is in now. */
   setShot: () => void;
-  /** Fly the working view to what students see for this step. */
+  /** Fly the working view to the students' view. */
   showShot: () => void;
-  /** Forget this step's shot: students get the plain side view. */
+  /** Forget the students' view: they get the plain side view. */
   clearShot: () => void;
   setDisplay: (change: Partial<StepDisplay>) => void;
   toggleTarget: (fencer: FencerId, area: TargetArea) => void;
@@ -241,7 +213,9 @@ interface EditorState extends Snapshot {
   refreshLibrary: () => Promise<void>;
   openCombination: (id: string) => Promise<void>;
   createCombination: () => void;
-  duplicateCombination: () => void;
+  /** Copy a combination (the open one unless named) and open the copy. */
+  duplicateCombination: (id?: string) => Promise<void>;
+  renameCombination: (id: string, title: string) => Promise<void>;
   removeCombination: (id: string) => Promise<void>;
   /** Export everything (combinations and poses), or only the chosen combinations. */
   exportLibrary: (ids?: string[]) => Promise<void>;
@@ -252,11 +226,14 @@ interface EditorState extends Snapshot {
   reconnectFolder: () => Promise<string>;
   disconnectFolder: () => Promise<void>;
 
-  saveCurrentAsPreset: (name: string) => void;
+  /** Save the posing fencer's pose under `name` ("Pose 3" and so on if none is given). Returns its id, so it can be renamed on the spot. */
+  saveCurrentAsPreset: (name?: string) => string;
+  /** Replace a saved pose with the posing fencer's pose now. */
   updatePreset: (id: string) => void;
   renamePreset: (id: string, name: string) => void;
-  /** Deletes a custom preset, or restores a built-in one to the original. */
   removePreset: (id: string) => void;
+  /** Put back a saved pose that was just deleted. */
+  restorePreset: (preset: PresetPose) => void;
 }
 
 const HISTORY_LIMIT = 200;
@@ -335,71 +312,6 @@ function keyed(s: EditorState, held: ReturnType<typeof keyEdit>, key?: string): 
   return { ...done, heldBack: held.heldBack };
 }
 
-/** A pose click that can still be dialled back. */
-interface Dial {
-  id: number;
-  /** The fencer the pose was clicked on: the only one the dial ever moves. */
-  fencer: FencerId;
-  name: string;
-  /** Both fencers before the click, and the posing fencer's pose with all of it applied. */
-  before: Record<FencerId, Pose>;
-  to: Pose;
-  /** Both fencers as the click or the dial last left them. */
-  now: Record<FencerId, Pose>;
-  amount: number;
-}
-
-let dials = 0;
-
-const dialKey = (d: Dial) => `drag.pose.${d.id}`;
-
-/**
- * The pose that can be dialled now: its name and how far it is applied (0 to
- * 1). Only while its own fencer is selected, both fencers are exactly as the
- * click or the dial left them, and nothing else has been done since (another
- * edit, a change of step, undo or redo end it): so the click and all its
- * dialling are always one undo step, and it can never move the other fencer.
- */
-export function poseDial(
-  s: Pick<EditorState, 'dial' | 'combination' | 'stepIndex' | 'active' | 'lastEdit'>,
-): { name: string; amount: number } | null {
-  const d = s.dial;
-  const poses = s.combination.steps[s.stepIndex]?.poses;
-  if (!d || !poses || s.active !== d.fencer || s.lastEdit?.key !== dialKey(d)) return null;
-  if (poses.A !== d.now.A || poses.B !== d.now.B) return null;
-  return { name: d.name, amount: d.amount };
-}
-
-/** Is this part of a label exactly what an action writes: "A: Beat 6", "B: Hits the hand with a lunge"? */
-const written = (part: string) => /^[AB]: /.test(part) && ACTION_LABELS.has(part.slice(3));
-
-/**
- * The step label after `part` is added: set when empty, appended when the
- * label is made only of names actions write, else left alone as the coach's
- * own ("A: feint low" is theirs; so is "A: Lunge (long)").
- */
-export function labelWith(label: string, part: string): string {
-  if (!label.trim()) return part;
-  return label.split(' · ').every(written) ? `${label} · ${part}` : label;
-}
-
-function rememberedFlag(key: string, fallback: boolean): boolean {
-  try {
-    const v = localStorage.getItem(`fencing-poser.${key}`);
-    return v === null ? fallback : v === 'on';
-  } catch {
-    return fallback;
-  }
-}
-
-function rememberFlag(key: string, on: boolean) {
-  try {
-    localStorage.setItem(`fencing-poser.${key}`, on ? 'on' : 'off');
-  } catch {
-    // Only a preference.
-  }
-}
-
 function rememberedLabels(): boolean {
   try {
     return localStorage.getItem('fencing-poser.labels') !== 'off';
@@ -434,14 +346,24 @@ export function currentStep(s: Snapshot): Step {
   return s.combination.steps[s.stepIndex];
 }
 
-/** Has what students see for this step been set? (Without one they get the plain side view.) */
-export function hasShot(step: Step): boolean {
-  return !!step.camera;
+/**
+ * The one view students watch the combination from, if the coach has chosen
+ * one (without it they get the plain side view). It is written to every
+ * step, which is how saved combinations have always carried their views.
+ */
+export function studentsView(c: Combination): StepCamera | undefined {
+  return c.steps.find((step) => step.camera)?.camera;
 }
 
-/** Is the coach's working view sitting on what students see for the current step? */
-export function viewIsShot(s: Pick<EditorState, 'view' | 'combination' | 'stepIndex'>): boolean {
-  const shot = s.combination.steps[s.stepIndex].camera;
+/** Older combinations may have a different view on different steps; choosing one again replaces them all. */
+export function viewsDiffer(c: Combination): boolean {
+  const first = JSON.stringify(c.steps[0].camera);
+  return c.steps.some((step) => JSON.stringify(step.camera) !== first);
+}
+
+/** Is the coach's working view sitting on the students' view? */
+export function viewIsShot(s: Pick<EditorState, 'view' | 'combination'>): boolean {
+  const shot = studentsView(s.combination);
   if (!shot || !s.view) return false;
   // A flight lands within a few centimetres, not exactly.
   const near = (a: readonly number[], b: readonly number[]) => a.every((v, i) => Math.abs(v - b[i]) < 0.05);
@@ -474,6 +396,8 @@ function edit(state: EditorState, next: Partial<Snapshot>, key?: string, label?:
     past: joined ? state.past : [...state.past, snapshot(state)].slice(-HISTORY_LIMIT),
     future: [],
     lastEdit: key ? { key, at: now } : null,
+    // Whatever was held back, this edit is another matter (those that are held back say so themselves).
+    heldBack: null,
   };
 }
 
@@ -541,7 +465,6 @@ function fresh(combination: Combination): Partial<EditorState> {
     active: 'A',
     dragging: null,
     heldBack: null,
-    dial: null,
   };
 }
 
@@ -576,6 +499,12 @@ export const useEditor = create<EditorState>((set, get) => {
     const message = file ? await mergeIn(file) : '';
     await writeLibraryToFolder();
     return message;
+  };
+
+  /** Before leaving the open combination: write it now if it has been edited, so the last moment's work is not lost to the autosave's wait. */
+  const saveIfEdited = async () => {
+    const s = get();
+    if (s.loaded && s.past.length) await saveCombination(s.combination);
   };
 
   const first = newCombination();
@@ -669,15 +598,6 @@ export const useEditor = create<EditorState>((set, get) => {
     setHotDof: (hotDof) => set((s) => (s.hotDof === hotDof ? {} : { hotDof })),
     held: { shift: false, alt: false },
     setHeld: (held) => set((s) => (s.held.shift === held.shift && s.held.alt === held.alt ? {} : { held })),
-    cameraLocked: false,
-    toggleCameraLock: () => set((s) => ({ cameraLocked: !s.cameraLocked })),
-    toggleSharedView: () =>
-      set((s) => {
-        if (s.combination.sharedView) return edit(s, { combination: { ...s.combination, sharedView: false } });
-        const camera = currentStep(s).camera;
-        const steps = camera ? s.combination.steps.map((step) => ({ ...step, camera })) : s.combination.steps;
-        return edit(s, { combination: { ...withSteps(s.combination, steps), sharedView: true } });
-      }),
     preview: null,
     startPreview: () =>
       set((s) => {
@@ -714,6 +634,8 @@ export const useEditor = create<EditorState>((set, get) => {
     dragPose: (pose, dragId, from) =>
       set((s) => {
         const f = from.fencer;
+        // Nothing is posed while the combination plays (Space pressed in the middle of a drag).
+        if (s.preview) return {};
         // A drag ends once its fencer or step is no longer the one being posed...
         if (f !== s.active || from.stepId !== currentStep(s).id) return {};
         // ...or anything else has edited that fencer since the drag's last move (a key pressed mid-drag, undo).
@@ -761,104 +683,39 @@ export const useEditor = create<EditorState>((set, get) => {
         // Like a typed angle: kept things stay, and the blades are checked.
         return keyed(s, keyEdit(s, { ...activePose(s), joints }, keptThrough(activeSetup(s), s.keep, [joint])));
       }),
-    applyPreset: (preset, part = get().presetPart) => {
-      const s = get();
-      const before = currentStep(s).poses;
-      const to = poseFromPreset(preset, activeSetup(s).handedness, activePose(s), part);
-      const id = ++dials;
-      // The click and any dialling after it are one undo step.
-      set(edit(s, { combination: moved(s, to) }, `drag.pose.${id}`, `Step ${s.stepIndex + 1} · ${s.active}: ${preset.name}`));
-      set({ dial: { id, fencer: s.active, name: preset.name, before, to, now: currentStep(get()).poses, amount: 1 } });
-    },
-    dial: null,
-    setPoseAmount: (amount) => {
-      const s = get();
-      const d = s.dial;
-      if (!d || !poseDial(s)) return;
-      const k = Math.min(1, Math.max(0, amount));
-      if (k === d.amount) return;
-      const f = d.fencer;
-      // Always worked out from the poses before the click, so dialling back and forth leaves no trace.
-      const pose = k >= 1 ? d.to : k <= 0 ? d.before[f] : tweenPose(d.before[f], d.to, k);
-      const poses = k <= 0 ? d.before : pushBlades(s.combination, d.before, { ...d.before, [f]: pose }, f);
-      const label = `Step ${s.stepIndex + 1} · ${f}: ${d.name}${k < 1 ? ` ${Math.round(k * 100)}%` : ''}`;
-      set(edit(s, { combination: withStep(s, (st) => ({ ...st, poses })) }, dialKey(d), label));
-      set({ dial: { ...d, now: currentStep(get()).poses, amount: k } });
-    },
-    applyStepPose: (stepIndex, from) => {
-      const s = get();
-      const source = s.combination.steps[stepIndex];
-      const who = from ?? s.active;
-      if (!source || (stepIndex === s.stepIndex && who === s.active)) return;
-      s.applyPreset({
-        id: `step-${source.id}-${who}`,
-        name: `${who === s.active ? 'Pose' : `${who}’s pose`} from step ${stepIndex + 1}`,
-        builtIn: false,
-        pose: presetPoseFrom(source.poses[who], s.combination.fencers[who].handedness),
-      });
-    },
-    applyPresetToOther: (preset) =>
+    applyPreset: (preset) =>
       set((s) => {
-        const f: FencerId = s.active === 'A' ? 'B' : 'A';
-        const step = currentStep(s);
-        const pose = poseFromPreset(preset, s.combination.fencers[f].handedness, step.poses[f], s.presetPart);
-        const after = pushBlades(s.combination, step.poses, { ...step.poses, [f]: pose }, f);
-        return edit(s, { combination: withStep(s, (st) => ({ ...st, poses: after })) }, undefined, `Step ${s.stepIndex + 1} · ${f}: ${preset.name}`);
+        const to = poseFromPreset(preset, activeSetup(s).handedness, activePose(s));
+        // Already in that pose: nothing for the history to record.
+        if (!describeEdit(s.combination, moved(s, to))) return {};
+        return edit(s, { combination: moved(s, to) }, undefined, `Step ${s.stepIndex + 1} · ${s.active}: ${preset.name}`);
       }),
-    act: (action) => {
+    resetPose: () => {
       const s = get();
-      const newStep = s.actionsNewStep && action.kind !== 'distance';
-      // In new-step mode the action happens on a copy of this step, added after it.
-      let base: Snapshot = snapshot(s);
-      if (newStep) {
-        const steps = [...s.combination.steps];
-        steps.splice(s.stepIndex + 1, 0, copyStep(currentStep(s)));
-        base = { ...base, combination: withSteps(s.combination, steps), stepIndex: s.stepIndex + 1 };
-      }
+      const enGarde = BUILT_IN_PRESETS.find((p) => p.id === 'en-garde');
+      if (enGarde) s.applyPreset({ ...enGarde, name: 'Reset to en garde' });
+    },
+    pointTo: (area) => {
+      const s = get();
       const f = s.active;
-      const opp: FencerId = f === 'A' ? 'B' : 'A';
-      const result = applyAction(base.combination, currentStep(base).poses, f, action, s.presets);
-      // Blades too far apart to meet: nothing happens, and no step is added for it.
-      if (result.apart) return { short: 0, close: false, apart: true };
-      // No room for the footwork at all: likewise.
-      if (result.cramped === 'blocked') return { short: 0, close: false, apart: false, cramped: 'blocked' };
-      const short = result.short ?? 0;
-      const part = `${f}: ${actionLabel(action)}`;
-      const combination = withStep(base, (st) => {
-        let next: Step = { ...st, poses: result.poses };
-        if (action.kind !== 'distance') next = { ...next, label: labelWith(st.label, part) };
-        if (action.kind === 'hit' && !short) {
-          const targets = st.display?.targets ?? [];
-          if (!targets.some((t) => t.fencer === opp && t.area === action.area)) {
-            next = { ...next, display: { ...st.display, targets: [...targets, { fencer: opp, area: action.area }] } };
-          }
-        }
-        return next;
-      });
-      // Nothing changed at all (already there, and the label is the coach's own): leave history alone.
-      if (!newStep && !describeEdit(s.combination, combination)) return { short, close: !!result.close, apart: false, cramped: result.cramped };
-      set({
-        ...edit(s, { combination, stepIndex: base.stepIndex }, undefined, `Step ${base.stepIndex + 1} · ${part}`),
-        // Shaping the path into the old step makes no sense on a new one.
-        ...(newStep && { pathEdit: false }),
-      });
-      return { short, close: !!result.close, apart: false, cramped: result.cramped };
+      const result = applyAction(s.combination, currentStep(s).poses, f, { kind: 'hit', area, with: 'arm' }, s.presets);
+      const combination = withStep(s, (st) => ({ ...st, poses: result.poses }));
+      set(edit(s, { combination }, undefined, `Step ${s.stepIndex + 1} · ${f}: point to the ${area}`));
+      return { short: result.short ?? 0, close: !!result.close };
     },
-    actionsNewStep: rememberedFlag('actionsNewStep', false),
-    toggleActionsNewStep: () =>
-      set((s) => {
-        rememberFlag('actionsNewStep', !s.actionsNewStep);
-        return { actionsNewStep: !s.actionsNewStep };
-      }),
-    hitWith: 'arm',
-    setHitWith: (hitWith) => set({ hitWith }),
+    touchBlades: (where) => {
+      const s = get();
+      const f = s.active;
+      const poses = touchBlades(s.combination, currentStep(s).poses, f, where);
+      if (!poses) return false;
+      set(edit(s, { combination: withStep(s, (st) => ({ ...st, poses })) }, undefined, `Step ${s.stepIndex + 1} · ${f}: blades touching`));
+      return true;
+    },
     shapeActivePath: (shape) => {
       const s = get();
       if (s.stepIndex === 0) return;
       s.setPins(s.active, shapePath(s.combination, s.stepIndex, s.active, shape));
     },
-    presetPart: 'all',
-    setPresetPart: (presetPart) => set({ presetPart }),
     view: null,
     setView: (view) => set({ view }),
     flight: null,
@@ -867,24 +724,19 @@ export const useEditor = create<EditorState>((set, get) => {
       set((s) => {
         const camera = s.view;
         if (!camera) return {};
-        const combination = s.combination.sharedView
-          ? withSteps(s.combination, s.combination.steps.map((step) => ({ ...step, camera })))
-          : withStep(s, (step) => ({ ...step, camera }));
-        return edit(s, { combination }, 'shot', s.combination.sharedView ? 'Students’ view, every step' : `Step ${s.stepIndex + 1} · students’ view`);
+        const steps = s.combination.steps.map((step) => ({ ...step, camera }));
+        return edit(s, { combination: { ...withSteps(s.combination, steps), sharedView: true } }, undefined, 'Students’ view chosen');
       }),
     showShot: () =>
       set((s) => {
-        const camera = currentStep(s).camera;
+        const camera = studentsView(s.combination);
         return camera ? { flight: { camera, id: (s.flight?.id ?? 0) + 1, save: false } } : {};
       }),
     clearShot: () =>
       set((s) => {
-        if (!s.combination.steps.some((step, i) => step.camera && (s.combination.sharedView || i === s.stepIndex))) return {};
-        const bare = ({ camera: _, ...step }: Step): Step => step;
-        const combination = s.combination.sharedView
-          ? withSteps(s.combination, s.combination.steps.map(bare))
-          : withStep(s, bare);
-        return edit(s, { combination }, undefined, s.combination.sharedView ? 'Students’ view cleared, every step' : `Step ${s.stepIndex + 1} · students’ view cleared`);
+        if (!studentsView(s.combination)) return {};
+        const steps = s.combination.steps.map(({ camera: _, ...step }): Step => step);
+        return edit(s, { combination: withSteps(s.combination, steps) }, undefined, 'Students’ view back to the side');
       }),
     setDisplay: (change) =>
       set((s) => edit(s, { combination: withStep(s, (step) => ({ ...step, display: { ...step.display, ...change } })) })),
@@ -985,21 +837,36 @@ export const useEditor = create<EditorState>((set, get) => {
       set({ library: all.map(toEntry) });
     },
     openCombination: async (id) => {
+      await saveIfEdited();
       const c = await loadCombination(id);
       if (c) set(fresh(c));
     },
-    createCombination: () => set(fresh(newCombination())),
-    duplicateCombination: () => {
+    createCombination: () => {
+      void saveIfEdited();
+      set(fresh(newCombination()));
+    },
+    duplicateCombination: async (id) => {
+      await saveIfEdited();
+      const source = !id || id === get().combination.id ? get().combination : await loadCombination(id);
+      if (!source) return;
       const now = new Date().toISOString();
-      const copy = {
-        ...structuredClone(get().combination),
-        id: newId('combo'),
-        title: `${get().combination.title} (copy)`,
-        createdAt: now,
-        updatedAt: now,
-      };
+      const copy = { ...structuredClone(source), id: newId('combo'), title: `${source.title} (copy)`, createdAt: now, updatedAt: now };
       set(fresh(copy));
-      void saveCombination(copy).then(() => get().refreshLibrary());
+      await saveCombination(copy);
+      await get().refreshLibrary();
+      scheduleFolderWrite();
+    },
+    renameCombination: async (id, title) => {
+      const name = title.trim();
+      if (!name) return;
+      if (get().combination.id === id) return get().setTitle(name);
+      const c = await loadCombination(id);
+      if (!c) return;
+      await saveCombination({ ...c, title: name, updatedAt: new Date().toISOString() });
+      // Saving another combination marks it last-open; keep the open one as last-open.
+      await saveCombination(get().combination);
+      await get().refreshLibrary();
+      scheduleFolderWrite();
     },
     removeCombination: async (id) => {
       await deleteCombination(id);
@@ -1060,31 +927,35 @@ export const useEditor = create<EditorState>((set, get) => {
 
     saveCurrentAsPreset: (name) => {
       const s = get();
+      const taken = new Set(s.savedPresets.map((p) => p.name));
+      let n = s.savedPresets.length + 1;
+      while (taken.has(`Pose ${n}`)) n++;
+      const called = name?.trim() || `Pose ${n}`;
       const preset = {
-        id: newPresetId(name),
-        name,
+        id: newPresetId(called),
+        name: called,
         builtIn: false,
         pose: presetPoseFrom(activePose(s), activeSetup(s).handedness),
         updatedAt: new Date().toISOString(),
       };
       storePresets([...s.savedPresets, preset]);
+      return preset.id;
     },
     updatePreset: (id) => {
       const s = get();
-      const shown = s.presets.find((p) => p.id === id);
-      if (!shown) return;
-      const { modified: _, ...preset } = shown;
+      const preset = s.savedPresets.find((p) => p.id === id);
+      if (!preset) return;
       const pose = presetPoseFrom(activePose(s), activeSetup(s).handedness);
       storePresets(upsert(s.savedPresets, { ...preset, pose, updatedAt: new Date().toISOString() }));
     },
     renamePreset: (id, name) => {
-      const { savedPresets, presets } = get();
-      const shown = presets.find((p) => p.id === id);
-      if (!shown || !name.trim()) return;
-      const { modified: _, ...preset } = shown;
+      const { savedPresets } = get();
+      const preset = savedPresets.find((p) => p.id === id);
+      if (!preset || !name.trim() || name.trim() === preset.name) return;
       storePresets(upsert(savedPresets, { ...preset, name: name.trim(), updatedAt: new Date().toISOString() }));
     },
     removePreset: (id) => storePresets(get().savedPresets.filter((p) => p.id !== id)),
+    restorePreset: (preset) => storePresets(upsert(get().savedPresets, preset)),
   };
 });
 
@@ -1124,11 +995,4 @@ useEditor.subscribe((s, prev) => {
   if (!s.heldBack) return;
   const moved = s.active !== prev.active || s.combination.id !== prev.combination.id || currentStep(s).id !== currentStep(prev).id;
   if (moved || s.combination.fencers !== prev.combination.fencers) useEditor.setState({ heldBack: null });
-});
-
-// Playing (or scrubbing) shows each step's shot, as students will see it.
-// When it ends, the camera goes back to the view the coach was working in.
-useEditor.subscribe((s, prev) => {
-  if (!prev.preview || s.preview || !s.view) return;
-  useEditor.setState({ flight: { camera: s.view, id: (s.flight?.id ?? 0) + 1, save: false } });
 });

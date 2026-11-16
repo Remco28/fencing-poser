@@ -5,10 +5,9 @@ import { HEADING } from '../model/combination.ts';
 import { jointPosition, solveRig } from '../rig/kinematics.ts';
 import { START_X } from '../model/combination.ts';
 import { mirrorPose } from '../model/mirror.ts';
-import { JOINT_NAMES } from '../model/joints.ts';
-import { angle, type Pose } from '../model/types.ts';
+import { angle } from '../model/types.ts';
 import { BUILT_IN_PRESETS } from '../presets/builtin.ts';
-import { activePose, currentStep, hasShot, poseDial, useEditor, viewIsShot } from './store.ts';
+import { activePose, currentStep, studentsView, useEditor, viewIsShot, viewsDiffer } from './store.ts';
 
 const initial = useEditor.getState();
 const enGarde = BUILT_IN_PRESETS.find((p) => p.id === 'en-garde')!;
@@ -111,35 +110,12 @@ describe('presets', () => {
     expect(mine.pose.joints).toEqual(enGarde.pose.joints);
   });
 
-  it('edits a built-in in place and restores the original', () => {
-    state().setAngle('elbow_r', 'flex', 20);
-    state().updatePreset('en-garde');
-    let shown = state().presets.find((p) => p.id === 'en-garde')!;
-    expect(shown.modified).toBe(true);
-    expect(angle(shown.pose, 'elbow_r', 'flex')).toBe(20);
-
-    state().removePreset('en-garde');
-    shown = state().presets.find((p) => p.id === 'en-garde')!;
-    expect(shown.modified).toBe(false);
-    expect(shown.pose).toEqual(enGarde.pose);
-  });
-
   it('applies a preset mirrored to a left-hander, keeping where they stand', () => {
     state().setSetup({ handedness: 'left' });
     state().setPosition(1.5);
     state().applyPreset(enGarde);
     expect(pose().joints).toEqual(mirrorPose(enGarde.pose).joints);
     expect(pose().root.x).toBe(1.5);
-  });
-});
-
-describe('partial presets', () => {
-  it('takes only the arms from a preset when asked', () => {
-    const lunge = BUILT_IN_PRESETS.find((p) => p.id === 'lunge')!;
-    const legs = pose().joints.knee_r;
-    state().applyPreset(lunge, 'upper');
-    expect(pose().joints.knee_r).toEqual(legs);
-    expect(pose().joints.elbow_r).toEqual(lunge.pose.joints.elbow_r);
   });
 });
 
@@ -193,7 +169,7 @@ describe('history list', () => {
 
   it('names each edit in plain words', () => {
     state().setAngle('elbow_r', 'flex', 90);
-    state().applyPreset(enGarde, 'all');
+    state().applyPreset(enGarde);
     state().addStep();
     state().setStepText({ label: 'Disengage' });
     expect(labels().slice(1)).toEqual(['Step 1 · A: right elbow', 'Step 1 · A: En garde', 'Added step 2', 'Step 2 · named “Disengage”']);
@@ -216,94 +192,60 @@ describe('history list', () => {
   });
 });
 
-describe('actions', () => {
-  const labels = () => state().combination.steps.map((s) => s.label);
-  const newStepMode = (on: boolean) => {
-    if (state().actionsNewStep !== on) state().toggleActionsNewStep();
-  };
-  beforeEach(() => newStepMode(false));
-
-  it('is one undo step, named in the history list', () => {
-    const before = currentStep(state()).poses;
-    state().act({ kind: 'footwork', move: 'lunge' });
-    expect(currentStep(state()).poses).not.toEqual(before);
-    expect(state().change.label).toBe('Step 1 · A: Lunge');
-    state().undo();
-    expect(currentStep(state()).poses).toEqual(before);
-    expect(state().past).toHaveLength(0);
-  });
-
-  it('adds exactly one step in new-step mode, acts there, and undoes in one', () => {
-    newStepMode(true);
-    const first = currentStep(state()).poses;
-    state().act({ kind: 'footwork', move: 'advance' });
-    expect(state().combination.steps).toHaveLength(2);
-    expect(state().stepIndex).toBe(1);
-    expect(state().combination.steps[0].poses).toEqual(first);
-    expect(pose().root.x).not.toBe(first.A.root.x);
-    expect(labels()).toEqual(['En garde', 'A: Advance']);
-    state().undo();
-    expect(state().combination.steps).toHaveLength(1);
-    expect(state().stepIndex).toBe(0);
-    newStepMode(false);
-  });
-
-  it('sets an empty label, appends to automatic ones, and leaves a typed one alone', () => {
-    state().addStep();
-    state().act({ kind: 'footwork', move: 'lunge' });
-    expect(labels()[1]).toBe('A: Lunge');
-    state().setActive('B');
-    state().act({ kind: 'parry', number: 4 });
-    expect(labels()[1]).toBe('A: Lunge · B: Parry 4');
-    state().setStepText({ label: 'Counter-attack' });
-    state().act({ kind: 'extend' });
-    expect(labels()[1]).toBe('Counter-attack');
-  });
-
-  it('highlights the target hit on the opponent, once', () => {
-    state().act({ kind: 'distance', measure: 'short' });
-    expect(state().act({ kind: 'hit', area: 'body', with: 'arm' }).short).toBe(0);
-    state().act({ kind: 'hit', area: 'body', with: 'arm' });
-    expect(currentStep(state()).display?.targets).toEqual([{ fencer: 'B', area: 'body' }]);
-  });
-
-  it('engages the blades', () => {
-    state().act({ kind: 'distance', measure: 'short' });
-    const a = currentStep(state()).poses.A;
-    state().act({ kind: 'engage', line: 'sixte' });
-    expect(state().change.label).toBe('Step 1 · A: Engage 6');
-    expect(currentStep(state()).poses.A.joints).not.toEqual(a.joints);
-  });
-
-  it('does nothing when the blades are too far apart to beat or engage, even in new-step mode', () => {
-    state().toggleActionsNewStep();
-    const before = state().combination;
-    expect(state().act({ kind: 'beat', line: 'quarte' })).toEqual({ short: 0, close: false, apart: true });
-    expect(state().combination).toBe(before);
-    expect(state().past).toHaveLength(0);
-  });
-
-  it('reports how far short a hit falls, without highlighting it', () => {
-    const { short } = state().act({ kind: 'hit', area: 'body', with: 'arm' });
-    expect(short).toBeGreaterThan(0);
+describe('help with the blade', () => {
+  it('brings the point to a target with the arm alone, as one undo step', () => {
+    state().advance(3.1);
+    const before = pose();
+    const { short } = state().pointTo('arm');
+    expect(short).toBe(0);
+    expect(pose().root).toEqual(before.root);
+    expect(pose().joints.knee_r).toEqual(before.joints.knee_r);
+    expect(state().change.label).toBe('Step 1 · A: point to the arm');
+    // No label and no highlight come with it: it only poses.
+    expect(currentStep(state()).label).toBe('En garde');
     expect(currentStep(state()).display?.targets ?? []).toEqual([]);
+    state().undo();
+    expect(pose()).toBe(before);
   });
 
-  it('never adds a step or a label for a distance', () => {
-    newStepMode(true);
-    state().act({ kind: 'distance', measure: 'medium' });
-    expect(state().combination.steps).toHaveLength(1);
-    expect(labels()).toEqual(['En garde']);
-    expect(state().change.label).toBe('Step 1 · A: Medium distance');
-    newStepMode(false);
+  it('says how far short the point falls from too far away', () => {
+    state().advance(2.4);
+    expect(state().pointTo('arm').short).toBeGreaterThan(0.3);
+  });
+
+  it('lays the posing fencer’s blade against the other, who does not move', () => {
+    state().advance(2.7);
+    const b = currentStep(state()).poses.B;
+    for (const where of ['inside', 'outside'] as const) {
+      const before = pose();
+      expect(state().touchBlades(where)).toBe(true);
+      expect(currentStep(state()).poses.B).toBe(b);
+      expect(pose().root).toEqual(before.root);
+      const rigs = (['A', 'B'] as const).map((f) => solveRig(state().combination.fencers[f], currentStep(state()).poses[f], HEADING[f]));
+      const z = (r: (typeof rigs)[number], t: number) => r.guard.z + (r.tip.z - r.guard.z) * t;
+      // Somewhere along them the blades are a blade's width apart, B's on the side asked for (A's outside is +z).
+      const gaps = Array.from({ length: 50 }, (_, i) => i / 49).map((t) => {
+        const x = rigs[0].guard.x + (rigs[0].tip.x - rigs[0].guard.x) * t;
+        const u = (x - rigs[1].guard.x) / (rigs[1].tip.x - rigs[1].guard.x);
+        return u < 0 || u > 1 ? null : z(rigs[1], u) - z(rigs[0], t);
+      }).filter((g): g is number => g !== null);
+      expect(gaps.length).toBeGreaterThan(0);
+      expect(gaps.some((g) => (where === 'outside' ? g > 0 : g < 0) && Math.abs(g) < 0.06), where).toBe(true);
+    }
+  });
+
+  it('does nothing when the blades are too far apart to meet', () => {
+    const before = state().combination;
+    expect(state().touchBlades('outside')).toBe(false);
+    expect(state().combination).toBe(before);
   });
 
   it('sends the path under the blade, and straightens it again', () => {
     state().shapeActivePath('under');
     expect(state().past).toHaveLength(0);
-    state().act({ kind: 'distance', measure: 'medium' });
+    state().advance(2.7);
     state().addStep();
-    state().act({ kind: 'footwork', move: 'lunge' });
+    state().pointTo('body');
     state().shapeActivePath('under');
     expect(currentStep(state()).pins?.A).toHaveLength(1);
     state().shapeActivePath('direct');
@@ -311,234 +253,97 @@ describe('actions', () => {
   });
 });
 
-describe('the working view and what students see', () => {
+describe('the coach’s view and the students’ view', () => {
   const here = { position: [1, 2, 3], target: [0, 1, 0] } as const;
   const there = { position: [4, 2, -3], target: [1, 1, 0] } as const;
   const look = (v: typeof here | typeof there) => state().setView({ position: [...v.position], target: [...v.target] });
 
-  it('never changes a step by looking around', () => {
+  it('never changes the combination by looking around', () => {
     const before = state().combination;
     look(here);
     look(there);
     expect(state().combination).toBe(before);
-    expect(hasShot(currentStep(state()))).toBe(false);
+    expect(studentsView(state().combination)).toBeUndefined();
   });
 
-  it('uses the working view for students only when asked, as one undo step', () => {
+  it('gives students one view for every step, only when asked, as one undo step', () => {
+    state().addStep();
     look(here);
     expect(viewIsShot(state())).toBe(false);
     state().setShot();
-    expect(currentStep(state()).camera).toEqual(here);
+    expect(state().combination.steps.map((s) => s.camera)).toEqual([here, here]);
     expect(viewIsShot(state())).toBe(true);
     look(there);
-    expect(currentStep(state()).camera).toEqual(here);
+    expect(studentsView(state().combination)).toEqual(here);
     expect(viewIsShot(state())).toBe(false);
+    // A step added later is watched from the same view.
+    state().addStep();
+    expect(currentStep(state()).camera).toEqual(here);
     state().undo();
-    expect(hasShot(currentStep(state()))).toBe(false);
+    state().undo();
+    expect(studentsView(state().combination)).toBeUndefined();
   });
 
-  it('sets and clears every step at once with one view for all', () => {
+  it('replaces older views that differed from step to step, and clears them all', () => {
     state().addStep();
-    state().toggleSharedView();
+    look(here);
+    state().setShot();
+    useEditor.setState((s) => ({ combination: { ...s.combination, steps: s.combination.steps.map((st, i) => (i ? { ...st, camera: { position: [...there.position], target: [...there.target] } } : st)) } }));
+    expect(viewsDiffer(state().combination)).toBe(true);
     look(there);
     state().setShot();
+    expect(viewsDiffer(state().combination)).toBe(false);
     expect(state().combination.steps.map((s) => s.camera)).toEqual([there, there]);
     state().clearShot();
-    expect(state().combination.steps.some(hasShot)).toBe(false);
+    expect(state().combination.steps.some((s) => s.camera)).toBe(false);
   });
 
-  it('keeps the working view when moving between steps, and can fly to the step’s shot', () => {
+  it('never moves the coach’s view by itself: not between steps, not when playing starts or stops', () => {
     look(here);
     state().setShot();
     state().addStep();
     look(there);
     const flights = state().flight?.id ?? 0;
     state().goToStep(0);
+    state().startPreview();
+    state().tickPreview(300);
+    state().stopPreview();
     expect(state().flight?.id ?? 0).toBe(flights);
+    expect(state().view).toEqual(there);
+    // Only when asked does it go to the students' view.
     state().showShot();
     expect(state().flight?.camera).toEqual(here);
   });
-
-  it('goes back to the working view when playing stops', () => {
-    state().addStep();
-    look(there);
-    state().startPreview();
-    state().stopPreview();
-    expect(state().flight?.camera).toEqual(there);
-  });
 });
 
-describe('more from poses', () => {
-  const lunge = BUILT_IN_PRESETS.find((p) => p.id === 'lunge')!;
-  const parry4 = BUILT_IN_PRESETS.find((p) => p.id === 'parry-4')!;
-  const changed = (a: Pose, b: Pose) => JOINT_NAMES.filter((n) => JSON.stringify(a.joints[n] ?? {}) !== JSON.stringify(b.joints[n] ?? {}));
-
-  it('applies a pose to the weapon arm alone, on the right side for a left-hander too', () => {
-    const before = pose();
-    state().applyPreset(parry4, 'arm');
-    expect(changed(before, pose()).sort()).toEqual(['elbow_r', 'shoulder_r', 'wrist_r']);
-    state().setSetup({ handedness: 'left' });
-    state().applyPreset(enGarde, 'all');
-    const left = pose();
-    state().applyPreset(parry4, 'arm');
-    expect(changed(left, pose()).sort()).toEqual(['elbow_l', 'shoulder_l', 'wrist_l']);
+describe('the coach’s own poses', () => {
+  it('saves a pose in one go under a plain name, renames it, replaces it, deletes it and brings it back', () => {
+    const id = state().saveCurrentAsPreset();
+    expect(state().savedPresets.map((p) => p.name)).toEqual(['Pose 1']);
+    state().renamePreset(id, 'Guard, low hand');
+    expect(state().saveCurrentAsPreset()).not.toBe(id);
+    expect(state().savedPresets.map((p) => p.name)).toEqual(['Guard, low hand', 'Pose 2']);
+    state().setAngle('elbow_r', 'flex', 20);
+    state().updatePreset(id);
+    const saved = state().savedPresets[0];
+    expect(angle(saved.pose, 'elbow_r', 'flex')).toBe(20);
+    state().removePreset(id);
+    expect(state().savedPresets.map((p) => p.name)).toEqual(['Pose 2']);
+    state().restorePreset(saved);
+    expect(state().savedPresets.map((p) => p.name).sort()).toEqual(['Guard, low hand', 'Pose 2']);
   });
 
-  it('dials a pose back: halfway is halfway, and the click with all its dialling is one undo step', () => {
-    const before = pose();
-    state().applyPreset(lunge);
-    const full = pose();
-    expect(poseDial(state())).toEqual({ name: 'Lunge', amount: 1 });
-    state().setPoseAmount(0.5);
-    expect(angle(pose(), 'knee_r', 'flex')).toBeCloseTo((angle(before, 'knee_r', 'flex') + angle(full, 'knee_r', 'flex')) / 2, 6);
-    expect(pose().root.x).toBe(before.root.x);
-    state().setPoseAmount(0.25);
-    state().setPoseAmount(1);
-    expect(pose()).toEqual(full);
-    state().setPoseAmount(0);
-    expect(pose()).toEqual(before);
-    expect(state().past).toHaveLength(1);
-    state().setPoseAmount(0.5);
-    state().undo();
-    expect(pose()).toEqual(before);
-    expect(state().past).toHaveLength(0);
-  });
-
-  it('stops offering the dial once anything else moves either fencer', () => {
-    state().applyPreset(lunge);
-    state().setAngle('knee_l', 'flex', 20);
-    expect(poseDial(state())).toBeNull();
-    const now = pose();
-    state().setPoseAmount(0.5);
-    expect(pose()).toBe(now);
-
-    state().applyPreset(lunge);
+  it('puts a saved pose back on either fencer where they stand, and resets to en garde', () => {
+    state().setAngle('elbow_r', 'flex', 20);
+    state().saveCurrentAsPreset('Bent');
     state().setActive('B');
-    state().setAngle('knee_l', 'flex', 20);
-    state().setActive('A');
-    expect(poseDial(state())).toBeNull();
-
-    state().applyPreset(lunge);
-    state().addStep();
-    expect(poseDial(state())).toBeNull();
-  });
-
-  it('leaves the other fencer’s blade as it was after dialling there and back', () => {
-    state().act({ kind: 'distance', measure: 'short' });
-    const other = currentStep(state()).poses.B;
-    state().applyPreset(BUILT_IN_PRESETS.find((p) => p.id === 'extension')!);
-    for (const k of [0.8, 0.3, 0.6, 0]) state().setPoseAmount(k);
-    expect(currentStep(state()).poses.B).toEqual(other);
-  });
-
-  it('takes a pose from another step, keeping where the fencer stands', () => {
-    state().addStep();
-    state().applyPreset(lunge);
-    state().setPosition(-1);
-    const lunged = pose();
-    state().goToStep(0);
-    const here = pose().root.x;
-    state().applyStepPose(1);
-    expect(pose().joints).toEqual(lunged.joints);
-    expect(pose().root.x).toBe(here);
-    expect(state().change.label).toBe('Step 1 · A: Pose from step 2');
-    // And it can be dialled like any pose.
-    expect(poseDial(state())?.name).toBe('Pose from step 2');
-  });
-
-  it('takes the other fencer’s pose, and does nothing when asked for the pose already there', () => {
-    state().setActive('B');
-    state().applyPreset(lunge);
-    state().setActive('A');
-    const b = currentStep(state()).poses.B;
-    state().applyStepPose(0, 'B');
-    expect(pose().joints).toEqual(b.joints);
-    const edits = state().past.length;
-    state().applyStepPose(0);
-    expect(state().past).toHaveLength(edits);
-  });
-});
-
-describe('review round 1: the pose dial, labels and actions that change nothing', () => {
-  const lunge = BUILT_IN_PRESETS.find((p) => p.id === 'lunge')!;
-  const poses = () => currentStep(state()).poses;
-
-  it('never dials the other fencer: the dial hides when they are selected and comes back with its own', () => {
-    const before = poses();
-    state().applyPreset(lunge);
-    const lunged = poses();
-    state().setActive('B');
-    expect(poseDial(state())).toBeNull();
-    state().setPoseAmount(0.5);
-    expect(poses()).toBe(lunged);
-    expect(poses().B).toBe(before.B);
-    state().setActive('A');
-    expect(poseDial(state())).toEqual({ name: 'Lunge', amount: 1 });
-    state().setPoseAmount(0.5);
-    expect(poses().B).toEqual(before.B);
-    expect(state().change.label).toBe('Step 1 · A: Lunge 50%');
-  });
-
-  it('ends the dial after anything else, so a click and its dialling are always one undo step', () => {
-    const others: [string, () => void][] = [
-      ['another step and back', () => (state().goToStep(1), state().goToStep(0))],
-      ['undo then redo', () => (state().undo(), state().redo())],
-      ['a label', () => state().setStepText({ label: 'x' })],
-      ['what is shown', () => state().setDisplay({ distance: true })],
-      ['the students’ view', () => (state().setView({ position: [1, 2, 3], target: [0, 1, 0] }), state().setShot())],
-    ];
-    for (const [, between] of others) {
-      useEditor.setState(initial, true);
-      state().addStep();
-      state().goToStep(0);
-      state().applyPreset(lunge);
-      const lunged = pose();
-      const entries = state().past.length;
-      between();
-      expect(poseDial(state())).toBeNull();
-      state().setPoseAmount(0.5);
-      expect(pose()).toEqual(lunged);
-      expect(state().past.length - entries).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it('adds nothing to history when the dial is set to where it already is', () => {
-    state().applyPreset(lunge);
-    const entries = state().past.length;
-    const now = state().combination;
-    state().setPoseAmount(1);
-    expect(state().combination).toBe(now);
-    expect(state().past).toHaveLength(entries);
-  });
-
-  it('leaves alone any label that is not made only of the names actions write', () => {
-    for (const typed of ['A: feint low', 'A: feint to hand, then disengage', 'A: Lunge (long)', 'B: Parry 5', 'Feint', 'A: Lunge · watch the hand']) {
-      useEditor.setState(initial, true);
-      state().setStepText({ label: typed });
-      state().act({ kind: 'extend' });
-      expect(currentStep(state()).label).toBe(typed);
-    }
-    // A label made only of such names is still extended, even after the coach corrected one of them.
-    useEditor.setState(initial, true);
-    state().act({ kind: 'parry', number: 6 });
-    state().setStepText({ label: 'A: Parry 4' });
-    state().setActive('B');
-    state().act({ kind: 'footwork', move: 'lunge' });
-    expect(currentStep(state()).label).toBe('A: Parry 4 · B: Lunge');
-  });
-
-  it('does nothing for an action that changes nothing on a step the coach named', () => {
-    state().act({ kind: 'footwork', move: 'recover' });
-    state().setStepText({ label: 'Back on guard' });
-    const entries = state().past.length;
-    const now = state().combination;
-    state().act({ kind: 'footwork', move: 'recover' });
-    expect(state().combination).toBe(now);
-    expect(state().past).toHaveLength(entries);
-    // In new-step mode the step is still added: the coach asked for one.
-    state().toggleActionsNewStep();
-    state().act({ kind: 'footwork', move: 'recover' });
-    expect(state().combination.steps).toHaveLength(2);
+    const at = pose().root;
+    state().applyPreset(state().savedPresets[0]);
+    expect(angle(pose(), 'elbow_r', 'flex')).toBe(20);
+    expect(pose().root).toEqual(at);
+    state().resetPose();
+    expect(pose().joints).toEqual(enGarde.pose.joints);
+    expect(pose().root).toEqual(at);
   });
 });
 

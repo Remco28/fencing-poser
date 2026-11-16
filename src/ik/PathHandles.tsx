@@ -136,7 +136,7 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
     if (!drag.current) return;
     (e.target as unknown as Element).releasePointerCapture(e.pointerId);
     drag.current = null;
-    if (controls) controls.enabled = !useEditor.getState().cameraLocked;
+    if (controls) controls.enabled = true;
   };
   const pointer = (key: string, cursor: string) => ({
     onPointerOver: (e: ThreeEvent<PointerEvent>) => {

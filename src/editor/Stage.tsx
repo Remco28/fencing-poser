@@ -16,8 +16,8 @@ import { ClearView } from '../scene/ClearView.tsx';
 import { Environment } from '../scene/Environment.tsx';
 import { FitRig } from '../scene/FitRig.tsx';
 import { EDITOR_FOV } from '../scene/frame.ts';
-import { measure, viewFor } from '../scene/measure.ts';
-import { CameraDriver, Ticker } from '../scene/playback.tsx';
+import { measure } from '../scene/measure.ts';
+import { Ticker } from '../scene/playback.tsx';
 import { PointTrail } from '../scene/PointTrail.tsx';
 import { ReadoutLines } from '../scene/Readouts.tsx';
 import { frameAt, keyAt } from '../viewer/player.ts';
@@ -178,12 +178,11 @@ export function Stage() {
           target={[0, 0.9, 0]}
           makeDefault
           maxPolarAngle={Math.PI * 0.495}
-          enabled={!s.cameraLocked && !playing}
+          // The view is the coach's own, playing or not: it moves only when they move it.
           zoomToCursor
         />
         <ClearView clear={() => useUi.getState().clear} />
         {playing && <Ticker onTick={s.tickPreview} />}
-        {playing && <CameraDriver view={frame?.camera ?? viewFor('side', step)} />}
         <CameraRig flight={s.flight} onView={s.setView} />
         <FitRig
           request={s.fitRequest}
