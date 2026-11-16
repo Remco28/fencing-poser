@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { PresetPose } from '../presets/builtin.ts';
+import { Popover } from '../ui/Popover.tsx';
 import { useEditor } from './store.ts';
 
 /**
@@ -11,7 +12,6 @@ export function PresetsPanel() {
   const poses = useEditor((s) => s.savedPresets);
   const active = useEditor((s) => s.active);
   const { applyPreset, resetPose, saveCurrentAsPreset, restorePreset } = useEditor.getState();
-  const [menu, setMenu] = useState<string | null>(null);
   const [naming, setNaming] = useState<string | null>(null);
   const [removed, setRemoved] = useState<PresetPose | null>(null);
 
@@ -37,9 +37,7 @@ export function PresetsPanel() {
             <PoseChip
               key={p.id}
               pose={p}
-              open={menu === p.id}
               naming={naming === p.id}
-              onMenu={(open) => setMenu(open ? p.id : null)}
               onNaming={(on) => setNaming(on ? p.id : null)}
               onApply={() => applyPreset(p)}
               onRemoved={() => setRemoved(p)}
@@ -72,9 +70,7 @@ export function PresetsPanel() {
 
 function PoseChip(props: {
   pose: PresetPose;
-  open: boolean;
   naming: boolean;
-  onMenu: (open: boolean) => void;
   onNaming: (on: boolean) => void;
   onApply: () => void;
   onRemoved: () => void;
@@ -82,27 +78,6 @@ function PoseChip(props: {
   const { pose: p } = props;
   const active = useEditor((s) => s.active);
   const { updatePreset, renamePreset, removePreset } = useEditor.getState();
-  const box = useRef<HTMLDivElement>(null);
-  // The menu opens below the chip, kept on screen.
-  const [at, setAt] = useState({ left: 0, top: 0 });
-  useEffect(() => {
-    if (!props.open || !box.current) return;
-    const r = box.current.getBoundingClientRect();
-    setAt({ left: Math.max(8, Math.min(r.left, window.innerWidth - 260)), top: r.bottom + 4 });
-    // Close the menu on a click anywhere else.
-    const onDown = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) props.onMenu(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.open]);
-
-  const done = (fn?: () => void) => {
-    fn?.();
-    props.onMenu(false);
-  };
-
   if (props.naming) {
     const finish = (name: string) => {
       renamePreset(p.id, name);
@@ -128,35 +103,31 @@ function PoseChip(props: {
   }
 
   return (
-    <div className="preset-chip mine" ref={box}>
+    <div className="preset-chip mine">
       <button className="small apply" onClick={props.onApply} title={`Give ${active} this pose, standing where they are`}>
         {p.name}
       </button>
-      <button className="small more" aria-label={`More for ${p.name}`} aria-expanded={props.open} onClick={() => props.onMenu(!props.open)}>
-        ⋯
-      </button>
-      {props.open && (
-        <div className="menu" role="menu" style={{ left: at.left, top: at.top }}>
-          <button role="menuitem" onClick={() => done(() => props.onNaming(true))}>
-            Rename
-          </button>
-          <button role="menuitem" onClick={() => done(() => updatePreset(p.id))} title={`“${p.name}” becomes ${active}’s pose as it is now`}>
-            Replace with {active}’s pose now
-          </button>
-          <button
-            role="menuitem"
-            className="danger"
-            onClick={() =>
-              done(() => {
+      {/* A floating card, drawn above everything, so the tray's edge cannot clip it. */}
+      <Popover className="small more" label={<span aria-hidden>⋯</span>} title={`More for ${p.name}`} width={230}>
+        {(close) => (
+          <div className="menu-list">
+            <button onClick={() => (close(), props.onNaming(true))}>Rename</button>
+            <button onClick={() => (close(), updatePreset(p.id))} title={`“${p.name}” becomes ${active}’s pose as it is now`}>
+              Replace with {active}’s pose now
+            </button>
+            <button
+              className="danger"
+              onClick={() => {
+                close();
                 removePreset(p.id);
                 props.onRemoved();
-              })
-            }
-          >
-            Delete
-          </button>
-        </div>
-      )}
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </Popover>
     </div>
   );
 }

@@ -1564,6 +1564,50 @@ input.hud-input {
 }
 
 /* From behind, only the opponent's blade is drawn, with its point marked. */
+/* Shaping a movement: each point's path, solid rings for its bends, faint ones where another can go. */
+.sk-path .line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  pointer-events: none;
+}
+
+.sk-path.other .line {
+  opacity: 0.55;
+}
+
+.sk-path .grab {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  cursor: grab;
+}
+
+.sk-ring {
+  cursor: grab;
+}
+
+.sk-ring .hit {
+  fill: transparent;
+}
+
+.sk-ring .mark {
+  fill: var(--paper);
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.sk-ring.free .mark {
+  stroke-width: 1.5;
+  opacity: 0.6;
+}
+
+.sk-ring.hover .mark {
+  opacity: 1;
+  stroke-width: 3;
+}
+
 .sk-their-point {
   fill: var(--paper);
   stroke: var(--pencil);

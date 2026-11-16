@@ -5,7 +5,7 @@ import { curvePose } from '../model/tween.ts';
 import { BUILT_IN_PRESETS } from '../presets/builtin.ts';
 import { solveRig } from '../rig/kinematics.ts';
 import { frameAt, throughKnots } from '../viewer/player.ts';
-import { pathPoint, pinFor } from './path.ts';
+import { freeSlots, grabAt, pathPoint, pinFor } from './path.ts';
 
 const P = (id: string) => BUILT_IN_PRESETS.find((p) => p.id === id)!.pose;
 
@@ -153,5 +153,20 @@ describe('shaping a path', () => {
     }
     expect(Math.max(...worst)).toBeLessThan(0.12);
     expect(worst.reduce((a, b) => a + b) / worst.length).toBeLessThan(0.035);
+  });
+});
+
+describe('where bends go', () => {
+  const pin = (at: number) => ({ at, joints: {} });
+  it('offers the quarter points not taken, while there is room', () => {
+    expect(freeSlots([])).toEqual([0.25, 0.5, 0.75]);
+    expect(freeSlots([pin(0.45)])).toEqual([0.25, 0.75]);
+    expect(freeSlots([pin(0.2), pin(0.5), pin(0.8)])).toEqual([]);
+  });
+  it('moves a nearby bend, adds one elsewhere, and moves the nearest when full', () => {
+    expect(grabAt([pin(0.5)], 0.55)).toEqual({ at: 0.5, others: [] });
+    expect(grabAt([pin(0.5)], 0.2)).toEqual({ at: 0.2, others: [pin(0.5)] });
+    expect(grabAt([pin(0.2), pin(0.5), pin(0.8)], 0.66)).toEqual({ at: 0.66, others: [pin(0.2), pin(0.5)] });
+    expect(grabAt([], 0.01).at).toBeCloseTo(0.08);
   });
 });

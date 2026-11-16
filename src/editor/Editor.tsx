@@ -158,7 +158,7 @@ function PathBanner() {
         <strong>
           Path from step {s.stepIndex} to {s.stepIndex + 1}
         </strong>
-        <span>Drag the blue path up, down or sideways (up to 3 rings). Double-click a ring to remove it.</span>
+        <span>Drag a ring, in the 3D view or the sketch, to bend the point’s path. Faint rings add a bend (up to 3). Double-click a ring to remove it.</span>
       </p>
       <button
         onClick={() => FENCERS.forEach((f) => (step.pins?.[f] || step.via?.[f] || step.bend?.[f]) && s.setPins(f, null))}

@@ -16,6 +16,32 @@ import { pointTo } from './blades.ts';
 
 /** At most this many pins per fencer per movement: enough for an angle or an S, few enough to stay smooth. */
 export const MAX_PINS = 3;
+/** Grabbing the path this close (in time through the movement) to a pin moves that pin. */
+export const PIN_NEAR = 0.12;
+/** Pins stay this far from the two steps, which never move. */
+export const PIN_EDGE = 0.08;
+
+/**
+ * Where another bend can be added, shown as faint rings: the quarter points
+ * of the movement not already taken, while there is room for another pin.
+ */
+export function freeSlots(pins: readonly Pin[]): number[] {
+  if (pins.length >= MAX_PINS) return [];
+  return [0.25, 0.5, 0.75].filter((t) => pins.every((p) => Math.abs(p.at - t) >= PIN_NEAR));
+}
+
+/**
+ * Grabbing the path `t` of the way through: the pin there if one is near,
+ * else a new pin there (or, with no room for another, the nearest one moves
+ * there). Returns the moment the dragged pin is at, and the pins that stay.
+ */
+export function grabAt(pins: readonly Pin[], t: number): { at: number; others: Pin[] } {
+  const at = Math.min(1 - PIN_EDGE, Math.max(PIN_EDGE, t));
+  const nearest = [...pins].sort((p, q) => Math.abs(p.at - at) - Math.abs(q.at - at))[0];
+  if (nearest && Math.abs(nearest.at - at) < PIN_NEAR) return { at: nearest.at, others: pins.filter((p) => p !== nearest) };
+  if (nearest && pins.length >= MAX_PINS) return { at, others: pins.filter((p) => p !== nearest) };
+  return { at, others: [...pins] };
+}
 
 /** Where a fencer's point is `at` (0 to 1) through the movement into step `to`, as it plays now. */
 export function pathPoint(

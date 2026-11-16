@@ -5,15 +5,11 @@ import { ACCENT, PAPER } from '../design.ts';
 import { useEditor } from '../editor/store.ts';
 import { FENCERS, type Combination, type FencerId, type Pin } from '../model/combination.ts';
 import { frameAt, pinsOf } from '../viewer/player.ts';
-import { MAX_PINS, pathPoint, pinFor } from './path.ts';
+import { freeSlots, grabAt, pathPoint, pinFor } from './path.ts';
 
 let dragCount = 0;
 
 const SAMPLES = 40;
-/** Grabbing the path this close (in time through the movement) to a pin moves that pin. */
-const NEAR = 0.12;
-/** Pins stay this far from the two steps, which never move. */
-const EDGE = 0.08;
 
 /** A paper disc with an ink ring and a small grip mark: clearly not a drag handle of the body. */
 function useRingTexture() {
@@ -43,11 +39,10 @@ function useRingTexture() {
 }
 
 /**
- * Shaping the movement into step `to`: grab a point's blue path anywhere and
- * pull it. Where you grab becomes a pin (a ring), up to three per point;
- * grabbing near a ring moves that ring, and double-clicking a ring removes it.
- * With no pins yet, a ring halfway shows where to start. The poses at either
- * end stay as they are.
+ * Shaping the movement into step `to`: drag a ring to bend a point's path.
+ * Solid rings are bends; faint ones show where another can go (up to three
+ * per point). The path itself can be grabbed anywhere too. Double-clicking a
+ * ring removes it. The poses at either end stay as they are.
  */
 export function PathHandles({ c, to }: { c: Combination; to: number }) {
   const camera = useThree((s) => s.camera);
@@ -66,7 +61,10 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
         const length = points.reduce((sum, p, i) => (i ? sum + p.distanceTo(points[i - 1]) : 0), 0);
         // A tube a little wider than the drawn line, invisible, to grab the path by.
         const tube = length > 0.02 ? new TubeGeometry(new CatmullRomCurve3(points), SAMPLES * 2, 0.02, 6) : null;
-        const rings = pins.length ? pins.map((p) => ({ at: p.at, point: where(p.at) })) : [{ at: 0.5, point: where(0.5) }];
+        const rings = [
+          ...pins.map((p) => ({ at: p.at, point: where(p.at), free: false })),
+          ...freeSlots(pins).map((at) => ({ at, point: where(at), free: true })),
+        ];
         return { f, pins, points, tube, rings };
       }),
     [c, to],
@@ -111,15 +109,9 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
     points.forEach((p, i) => {
       if (p.distanceTo(e.point) < points[best].distanceTo(e.point)) best = i;
     });
-    const t = Math.min(1 - EDGE, Math.max(EDGE, best / SAMPLES));
-    const nearest = [...pins].sort((p, q) => Math.abs(p.at - t) - Math.abs(q.at - t))[0];
-    if (nearest && (Math.abs(nearest.at - t) < NEAR || pins.length >= MAX_PINS)) {
-      if (Math.abs(nearest.at - t) < NEAR) return begin(f, nearest.at, e.point, e);
-      begin(f, t, e.point, e);
-      drag.current!.others = pins.filter((p) => p !== nearest);
-      return;
-    }
-    begin(f, t, e.point, e);
+    const { at, others } = grabAt(pins, best / SAMPLES);
+    begin(f, at, e.point, e);
+    drag.current!.others = others;
   };
 
   const move = (e: ThreeEvent<PointerEvent>) => {
@@ -166,14 +158,15 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             </mesh>
           )}
-          {rings.map(({ at, point }) => {
+          {rings.map(({ at, point, free }) => {
             const key = `${f}.${at}`;
+            const size = (free ? 0.028 : 0.04) * (hover === key ? 1.25 : 1);
             return (
               <sprite
                 key={key}
                 position={point}
                 renderOrder={12}
-                scale={hover === key ? [0.05, 0.05, 1] : [0.04, 0.04, 1]}
+                scale={[size, size, 1]}
                 onPointerDown={(e) => begin(f, at, point, e)}
                 onPointerMove={move}
                 onPointerUp={end}
@@ -184,7 +177,7 @@ export function PathHandles({ c, to }: { c: Combination; to: number }) {
                 }}
                 {...pointer(key, 'grab')}
               >
-                <spriteMaterial map={ring} depthTest={false} transparent sizeAttenuation={false} />
+                <spriteMaterial map={ring} depthTest={false} transparent opacity={free && hover !== key ? 0.5 : 1} sizeAttenuation={false} />
               </sprite>
             );
           })}

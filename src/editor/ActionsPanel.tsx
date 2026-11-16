@@ -83,6 +83,14 @@ export function ActionsPanel() {
               {text}
             </button>
           ))}
+          <button
+            className="small"
+            disabled={first}
+            title={first ? 'A path needs a step before it' : `Bend the paths into step ${s.stepIndex + 1} by hand: drag the rings in the 3D view or the sketch`}
+            onClick={() => s.editPath(s.stepIndex)}
+          >
+            Shape…
+          </button>
         </div>
       </div>
     </section>

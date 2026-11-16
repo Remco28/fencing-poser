@@ -3,7 +3,8 @@ import { Vector3 } from 'three';
 import { INK_SOFT } from '../design.ts';
 import { HANDLE_COLOR, nextDragId } from '../ik/Handles.tsx';
 import { DOT_JOINT, DOTS, dotPositions, dragDotKept, headCentre, keptDots, keptInDrag, keptInSlide, slideFencer, type Dot, type Spots } from '../ik/drag.ts';
-import { FENCERS, HEADING, type FencerId } from '../model/combination.ts';
+import { FENCERS, HEADING, type FencerId, type Pin } from '../model/combination.ts';
+import { freeSlots, grabAt, pathPoint, pinFor } from '../ik/path.ts';
 import type { FencerSetup, Pose } from '../model/types.ts';
 import { formatDistance } from '../model/units.ts';
 import { jointPosition, solveRig, type Rig } from '../rig/kinematics.ts';
@@ -11,7 +12,7 @@ import { frontToe } from '../scene/measure.ts';
 import { PISTE } from '../scene/Piste.tsx';
 import { currentStep, useEditor } from '../editor/store.ts';
 import { Toggle } from '../ui/Toggle.tsx';
-import { frameAt, keyAt } from '../viewer/player.ts';
+import { frameAt, keyAt, pinsOf } from '../viewer/player.ts';
 import { toFlat, toWorld, type Flat, type SketchView } from './project.ts';
 
 // A flat stick-figure drawing of both fencers under the 3D view: the same
@@ -169,7 +170,12 @@ type Drag =
   // `from` is the fencer's pose at pointer-down, `stepId` the step, `spots` where their kept things belong.
   | { kind: 'dot'; f: FencerId; dot: Dot; start: Vector3; from: Pose; stepId: string; spots: Spots; id: number; x0: number; y0: number; moved: boolean }
   | { kind: 'floor'; f: FencerId; from: Pose; stepId: string; spots: Spots; id: number; x0: number; y0: number; moved: boolean }
-  | { kind: 'pan'; cam: Cam; x0: number; y0: number };
+  | { kind: 'pan'; cam: Cam; x0: number; y0: number }
+  // Bending a point's path: the pin `at` that moment, starting where the path is there; `others` are the pins that stay.
+  | { kind: 'pin'; f: FencerId; at: number; start: Vector3; others: Pin[]; id: number; x0: number; y0: number; moved: boolean };
+
+/** Points along each path, for drawing it and finding where it was grabbed. */
+const PATH_SAMPLES = 40;
 
 export function Sketch() {
   const s = useEditor();
@@ -182,6 +188,8 @@ export function Sketch() {
     setCamState(c);
   };
   const drag = useRef<Drag | null>(null);
+  /** The last click on a ring (no drag), to tell a double-click: the drag holds the pointer, so the browser's own double-click lands on the sketch. */
+  const ringClick = useRef<{ key: string; t: number } | null>(null);
   const [dragging, setDragging] = useState<Drag['kind'] | null>(null);
   const [hover, setHover] = useState<string | null>(null);
 
@@ -323,6 +331,51 @@ export function Sketch() {
     begin({ kind: 'floor', f, from: poses[f], stepId: currentStep(st).id, spots: st.spotsFor(f, keptInSlide(st.keep)), id: nextDragId(), x0: x, y0: y, moved: false }, e);
   };
 
+  // Shaping: each point's path into this step, its bends (solid rings) and
+  // where another bend can go (faint rings). From behind, only that fencer's.
+  const paths = useMemo(() => {
+    if (!shaping) return [];
+    const c = s.combination;
+    const to = s.stepIndex;
+    return FENCERS.filter((f) => view !== 'behind' || f === facing).map((f) => {
+      const pins = pinsOf(c.steps[to], f);
+      const where = (at: number) => pathPoint(c, to, f, at, (pos) => frameAt(c, pos));
+      return {
+        f,
+        pins,
+        points: Array.from({ length: PATH_SAMPLES + 1 }, (_, i) => where(i / PATH_SAMPLES)),
+        rings: [
+          ...pins.map((p) => ({ at: p.at, point: where(p.at), free: false })),
+          ...freeSlots(pins).map((at) => ({ at, point: where(at), free: true })),
+        ],
+      };
+    });
+  }, [shaping, s.combination, s.stepIndex, view, facing]);
+
+  const onRingDown = (f: FencerId, at: number, point: Vector3, others: Pin[]) => (e: ReactPointerEvent) => {
+    if (e.button !== 0) return;
+    const { x, y } = local(e);
+    begin({ kind: 'pin', f, at, start: point.clone(), others, id: nextDragId(), x0: x, y0: y, moved: false }, e);
+  };
+
+  /** Grabbing the path line itself: the nearest moment along it becomes (or moves) a bend. */
+  const onPathDown = (f: FencerId) => (e: ReactPointerEvent) => {
+    if (e.button !== 0) return;
+    const path = paths.find((p) => p.f === f)!;
+    const { x, y } = local(e);
+    const px = (p: Vector3) => {
+      const q = toFlat(view, facing, p);
+      return Math.hypot(X(q.u) - x, Y(q.v) - y);
+    };
+    let best = 0;
+    path.points.forEach((p, i) => {
+      if (px(p) < px(path.points[best])) best = i;
+    });
+    const { at, others } = grabAt(path.pins, best / PATH_SAMPLES);
+    const start = pathPoint(s.combination, s.stepIndex, f, at, (pos) => frameAt(s.combination, pos));
+    begin({ kind: 'pin', f, at, start, others, id: nextDragId(), x0: x, y0: y, moved: false }, e);
+  };
+
   const onBackgroundDown = (e: ReactPointerEvent) => {
     if (e.button !== 0 && e.button !== 1) return;
     const { x, y } = local(e);
@@ -340,8 +393,18 @@ export function Sketch() {
     if (!d.moved && Math.hypot(x - d.x0, y - d.y0) < CLICK_PX) return;
     d.moved = true;
     const st = useEditor.getState();
-    if (st.active !== d.f) return;
     const c = camRef.current;
+    if (d.kind === 'pin') {
+      if (!st.pathEdit) return;
+      // Moved by as much as the pointer, never along the piste: how far along
+      // it the point is comes from the movement itself (as in the 3D view).
+      const p = toFlat(view, facing, d.start);
+      const target = toWorld(view, facing, p.u + (x - d.x0) / c.k, p.v - (y - d.y0) / c.k, d.start);
+      target.x = d.start.x;
+      st.setPins(d.f, [...d.others, pinFor(st.combination, st.stepIndex, d.f, target, d.at)], d.id);
+      return;
+    }
+    if (st.active !== d.f) return;
     if (d.kind === 'dot') {
       const target = toWorld(view, facing, (x - c.tx) / c.k, (c.ty - y) / c.k, d.start);
       // Always worked out from the pose the drag began with, so where the dot
@@ -369,6 +432,17 @@ export function Sketch() {
     // A click on a dot picks its joint, so the keys and the controls work on it.
     if (d.kind === 'dot' && !d.moved) useEditor.getState().select(DOT_JOINT[d.dot], d.f);
     if (d.kind === 'floor' && !d.moved) useEditor.getState().select('pelvis', d.f);
+    // Two quick clicks on a bend remove it.
+    if (d.kind === 'pin' && !d.moved) {
+      const key = `${d.f}.${d.at}`;
+      const now = performance.now();
+      const st = useEditor.getState();
+      const pins = pinsOf(st.combination.steps[st.stepIndex], d.f);
+      if (ringClick.current?.key === key && now - ringClick.current.t < 400 && pins.some((p) => p.at === d.at)) {
+        st.setPins(d.f, pins.filter((p) => p.at !== d.at));
+        ringClick.current = { key: '', t: now };
+      } else ringClick.current = { key, t: now };
+    }
   };
 
   // From behind, the two fencers lie on top of each other, so only the
@@ -399,7 +473,11 @@ export function Sketch() {
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
-        onDoubleClick={(e) => !(e.target as Element).closest('.sk-dot, .sk-marker') && fit()}
+        onDoubleClick={(e) => {
+          // Not after clicks on a ring (those are handled when the pointer comes up).
+          if (ringClick.current && performance.now() - ringClick.current.t < 500) return;
+          if (!(e.target as Element).closest('.sk-dot, .sk-marker, .sk-path')) fit();
+        }}
         role="img"
         aria-label="Stick-figure sketch of both fencers"
       >
@@ -466,6 +544,46 @@ export function Sketch() {
                 </text>
               </g>
             )}
+
+            {/* Shaping: the paths of the points, with rings to bend them. */}
+            {paths.map(({ f, pins, points, rings }) => (
+              <g key={f} className={`sk-path${f === s.active ? '' : ' other'}`}>
+                <polyline
+                  className="line"
+                  points={points.map((p) => {
+                    const q = toFlat(view, facing, p);
+                    return `${X(q.u)},${Y(q.v)}`;
+                  }).join(' ')}
+                />
+                <polyline
+                  className="grab"
+                  onPointerDown={onPathDown(f)}
+                  points={points.map((p) => {
+                    const q = toFlat(view, facing, p);
+                    return `${X(q.u)},${Y(q.v)}`;
+                  }).join(' ')}
+                >
+                  <title>{`Drag to bend ${f}’s path here`}</title>
+                </polyline>
+                {rings.map(({ at, point, free }) => {
+                  const q = toFlat(view, facing, point);
+                  const id = `${f}.ring.${at}`;
+                  return (
+                    <g
+                      key={id}
+                      className={`sk-ring${free ? ' free' : ''}${hover === id ? ' hover' : ''}`}
+                      onPointerDown={onRingDown(f, at, point, pins.filter((p) => p.at !== at))}
+                      onPointerEnter={() => setHover(id)}
+                      onPointerLeave={() => setHover(null)}
+                    >
+                      <title>{free ? `Drag to add a bend to ${f}’s path` : `Drag to move this bend in ${f}’s path; double-click to remove it`}</title>
+                      <circle className="hit" cx={X(q.u)} cy={Y(q.v)} r={11} />
+                      <circle className="mark" cx={X(q.u)} cy={Y(q.v)} r={free ? 4.5 : 6.5} />
+                    </g>
+                  );
+                })}
+              </g>
+            ))}
 
             {/* Floor markers: slide a fencer along the piste. */}
             {view !== 'behind' &&
