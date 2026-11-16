@@ -45,8 +45,8 @@ import { angle, type FencerSetup, type Pose } from '../model/types.ts';
 import type { PresetPose } from '../presets/builtin.ts';
 import { advance, keyAt } from '../viewer/player.ts';
 import { pushBlades } from '../ik/blades.ts';
-import { actionLabel, applyAction, shapePath, type Action, type HitWith, type PathShape } from '../actions/actions.ts';
-import { DEFAULT_KEEP, keepInPlace, type Keep } from '../ik/drag.ts';
+import { ACTION_LABELS, actionLabel, applyAction, shapePath, type Action, type Cramped, type HitWith, type PathShape } from '../actions/actions.ts';
+import { DEFAULT_KEEP, editKept, KEPT_AT_MOST, keptThrough, placesOf, slipOf, type Keep, type Kept, type Places } from '../ik/drag.ts';
 import type { SketchView } from '../sketch/project.ts';
 import { newPresetId, poseFromPreset, presetPoseFrom, shownPresets, upsert, type PosePart, type ShownPreset } from '../presets/library.ts';
 
@@ -152,6 +152,14 @@ interface EditorState extends Snapshot {
   /** What stays where it is while something else moves (editor state, never saved). */
   keep: Keep;
   toggleKeep: (key: keyof Keep) => void;
+  /**
+   * Where a fencer's kept things stood when the coach last placed them: key
+   * and typed edits measure from here, so a held key cannot walk a kept foot
+   * away a little at a time. Dropped by anything else that moves a fencer.
+   */
+  keptRef: KeptRef | null;
+  /** Set when the last key or typed edit was stopped short by something kept ("A’s feet are kept in place"); else null. */
+  heldBack: string | null;
   sketch: SketchState;
   toggleSketch: () => void;
   setSketchView: (view: SketchView) => void;
@@ -171,7 +179,7 @@ interface EditorState extends Snapshot {
    * in metres (and whether that was from being too close), or that the blades
    * were too far apart to meet, in which case nothing changed.
    */
-  act: (action: Action) => { short: number; close: boolean; apart: boolean };
+  act: (action: Action) => { short: number; close: boolean; apart: boolean; cramped?: Cramped };
   /** Each action (but a distance) is added as a new step after the current one. Remembered. */
   actionsNewStep: boolean;
   toggleActionsNewStep: () => void;
@@ -255,9 +263,48 @@ interface EditorState extends Snapshot {
 
 const HISTORY_LIMIT = 200;
 
+/** Where one fencer's kept things should stay, in one step. */
+interface KeptRef {
+  fencer: FencerId;
+  stepId: string;
+  places: Partial<Places>;
+}
+
+/**
+ * A key, a typed angle, Straighten or a step along the piste asks for `next`.
+ * The things in `kept` win: each is measured from where it was remembered, if
+ * it is still there (within the allowance), else from where it is now; the
+ * edit is applied only as far as keeps them all in place.
+ */
+function keyEdit(s: EditorState, next: Pose, kept: Kept[]): { pose: Pose; keptRef: KeptRef | null; heldBack: string | null } {
+  if (!kept.length) return { pose: next, keptRef: null, heldBack: null };
+  const setup = activeSetup(s);
+  const heading = HEADING[s.active];
+  const current = activePose(s);
+  const stepId = currentStep(s).id;
+  const now = placesOf(current, setup, heading);
+  const old = s.keptRef && s.keptRef.fencer === s.active && s.keptRef.stepId === stepId ? s.keptRef.places : {};
+  const places: Partial<Places> = {};
+  for (const k of kept) {
+    const was = old[k];
+    // Still within its hard limit of the remembered place: nothing else has moved it, so that place stands.
+    Object.assign(places, { [k]: was && slipOf(was, k, current, setup, heading) <= KEPT_AT_MOST + 1e-6 ? was : now[k] });
+  }
+  const { pose, cut } = editKept(places, current, next, setup, heading);
+  const names = [kept.some((k) => k.startsWith('foot')) && 'feet', kept.includes('hand') && 'hand', kept.includes('point') && 'point'].filter(Boolean);
+  return {
+    pose,
+    // Only what this edit kept is remembered: a limb the coach moved directly is placed afresh next time.
+    keptRef: { fencer: s.active, stepId, places },
+    heldBack: cut ? `Held back: ${s.active}’s ${names.join(' and ')} ${names.length === 1 && names[0] !== 'feet' ? 'is' : 'are'} kept in place.` : null,
+  };
+}
+
 /** A pose click that can still be dialled back. */
 interface Dial {
   id: number;
+  /** The fencer the pose was clicked on: the only one the dial ever moves. */
+  fencer: FencerId;
   name: string;
   /** Both fencers before the click, and the posing fencer's pose with all of it applied. */
   before: Record<FencerId, Pose>;
@@ -269,21 +316,36 @@ interface Dial {
 
 let dials = 0;
 
-/** The pose that can be dialled now: its name and how far it is applied (0 to 1); null once anything else has moved a fencer. */
-export function poseDial(s: Pick<EditorState, 'dial' | 'combination' | 'stepIndex'>): { name: string; amount: number } | null {
+const dialKey = (d: Dial) => `drag.pose.${d.id}`;
+
+/**
+ * The pose that can be dialled now: its name and how far it is applied (0 to
+ * 1). Only while its own fencer is selected, both fencers are exactly as the
+ * click or the dial left them, and nothing else has been done since (another
+ * edit, a change of step, undo or redo end it): so the click and all its
+ * dialling are always one undo step, and it can never move the other fencer.
+ */
+export function poseDial(
+  s: Pick<EditorState, 'dial' | 'combination' | 'stepIndex' | 'active' | 'lastEdit'>,
+): { name: string; amount: number } | null {
   const d = s.dial;
   const poses = s.combination.steps[s.stepIndex]?.poses;
-  if (!d || !poses || poses.A !== d.now.A || poses.B !== d.now.B) return null;
+  if (!d || !poses || s.active !== d.fencer || s.lastEdit?.key !== dialKey(d)) return null;
+  if (poses.A !== d.now.A || poses.B !== d.now.B) return null;
   return { name: d.name, amount: d.amount };
 }
 
-/** A step label written by an action: "A: Beat 6". */
-const AUTO_LABEL = /^[AB]: /;
+/** Is this part of a label exactly what an action writes: "A: Beat 6", "B: Hits the hand with a lunge"? */
+const written = (part: string) => /^[AB]: /.test(part) && ACTION_LABELS.has(part.slice(3));
 
-/** The step label after `part` is added: set when empty, appended when made only of such parts, else the coach's own. */
+/**
+ * The step label after `part` is added: set when empty, appended when the
+ * label is made only of names actions write, else left alone as the coach's
+ * own ("A: feint low" is theirs; so is "A: Lunge (long)").
+ */
 export function labelWith(label: string, part: string): string {
   if (!label.trim()) return part;
-  return label.split(' · ').every((p) => AUTO_LABEL.test(p)) ? `${label} · ${part}` : label;
+  return label.split(' · ').every(written) ? `${label} · ${part}` : label;
 }
 
 function rememberedFlag(key: string, fallback: boolean): boolean {
@@ -370,9 +432,12 @@ function edit(state: EditorState, next: Partial<Snapshot>, key?: string, label?:
   // Nothing changed (a key pressed at a joint's limit, a pose applied twice): keep history clean.
   if (!said) return {};
   const combination = next.combination && { ...next.combination, updatedAt: new Date(now).toISOString() };
+  // Anything that moves a fencer places their kept things afresh (key edits put their own back after this).
+  const posed = !!next.combination && next.combination.steps[next.stepIndex ?? state.stepIndex]?.poses !== currentStep(state).poses;
   return {
     ...next,
     ...(combination && { combination }),
+    ...(posed && { keptRef: null, heldBack: null }),
     change: { label: said, at: now },
     past: joined ? state.past : [...state.past, snapshot(state)].slice(-HISTORY_LIMIT),
     future: [],
@@ -382,14 +447,6 @@ function edit(state: EditorState, next: Partial<Snapshot>, key?: string, label?:
 
 function withSteps(c: Combination, steps: Step[]): Combination {
   return { ...c, steps };
-}
-
-/** The combination with the active fencer's pose in the current step replaced. */
-function withPose(s: EditorState, pose: Pose): Combination {
-  return withSteps(
-    s.combination,
-    s.combination.steps.map((step, i) => (i === s.stepIndex ? { ...step, poses: { ...step.poses, [s.active]: pose } } : step)),
-  );
 }
 
 /** The combination with the current step changed by `change`. */
@@ -450,6 +507,9 @@ function fresh(combination: Combination): Partial<EditorState> {
     lastEdit: null,
     selected: null,
     active: 'A',
+    keptRef: null,
+    heldBack: null,
+    dial: null,
   };
 }
 
@@ -505,7 +565,7 @@ export const useEditor = create<EditorState>((set, get) => {
         const all = [...s.past, snapshot(s), ...s.future];
         const target = all[index];
         if (!target || index === s.past.length) return {};
-        return { ...target, past: all.slice(0, index), future: all.slice(index + 1), lastEdit: null, preview: null };
+        return { ...target, past: all.slice(0, index), future: all.slice(index + 1), lastEdit: null, preview: null, keptRef: null, heldBack: null };
       }),
     savedPresets: [],
     presets: shownPresets([]),
@@ -527,8 +587,8 @@ export const useEditor = create<EditorState>((set, get) => {
         const pose = activePose(s);
         const spine = spineJoint(s, joint);
         const next = spine ? bendSpine(pose, dof, value - spineAngle(pose, dof)) : withAngle(pose, joint, dof, value);
-        const kept = keepInPlace(pose, next, activeSetup(s), HEADING[s.active], s.keep, spine ? ['abdomen', 'chest'] : [joint]);
-        return edit(s, { combination: moved(s, kept) }, `${s.active}.${joint}.${dof}`);
+        const held = keyEdit(s, next, keptThrough(activeSetup(s), s.keep, spine ? ['abdomen', 'chest'] : [joint]));
+        return { ...edit(s, { combination: moved(s, held.pose) }, `${s.active}.${joint}.${dof}`), keptRef: held.keptRef, heldBack: held.heldBack };
       }),
     pathEdit: false,
     editPath: (index) => set({ stepIndex: index, pathEdit: true, selected: null, preview: null }),
@@ -569,9 +629,11 @@ export const useEditor = create<EditorState>((set, get) => {
         const next = spine
           ? bendSpine(current, dof.key, delta)
           : withAngle(current, s.selected, dof.key, angle(current, s.selected, dof.key) + delta);
-        const pose = keepInPlace(current, next, activeSetup(s), HEADING[s.active], s.keep, spine ? ['abdomen', 'chest'] : [s.selected]);
+        const held = keyEdit(s, next, keptThrough(activeSetup(s), s.keep, spine ? ['abdomen', 'chest'] : [s.selected]));
         return {
-          ...edit(s, { combination: moved(s, pose) }, `${s.active}.${s.selected}.${dof.key}`),
+          ...edit(s, { combination: moved(s, held.pose) }, `${s.active}.${s.selected}.${dof.key}`),
+          keptRef: held.keptRef,
+          heldBack: held.heldBack,
           lastNudge: { dofIndex, id: (s.lastNudge?.id ?? 0) + 1 },
         };
       }),
@@ -624,11 +686,13 @@ export const useEditor = create<EditorState>((set, get) => {
     requestFit: (who) => set((s) => ({ fitRequest: { who, id: (s.fitRequest?.id ?? 0) + 1 } })),
     dragPose: (pose, dragId) => set((s) => edit(s, { combination: moved(s, pose) }, `drag.${dragId}`)),
     keep: remembered('keep', DEFAULT_KEEP),
+    keptRef: null,
+    heldBack: null,
     toggleKeep: (key) =>
       set((s) => {
         const keep = { ...s.keep, [key]: !s.keep[key] };
         remember('keep', keep);
-        return { keep };
+        return { keep, keptRef: null, heldBack: null };
       }),
     sketch: remembered('sketch', DEFAULT_SKETCH),
     toggleSketch: () => set((s) => setSketch(s, { open: !s.sketch.open })),
@@ -644,13 +708,17 @@ export const useEditor = create<EditorState>((set, get) => {
       set((s) => {
         const pose = activePose(s);
         const root = { ...pose.root, x: Math.max(-PISTE_HALF, Math.min(PISTE_HALF, x)) };
-        return edit(s, { combination: moved(s, { ...pose, root }) }, `${s.active}.position`);
+        // A step moves the feet with the fencer; a kept hand or point stays, the arm making up the difference.
+        const held = keyEdit(s, { ...pose, root }, [...(s.keep.hand ? (['hand'] as Kept[]) : []), ...(s.keep.point ? (['point'] as Kept[]) : [])]);
+        return { ...edit(s, { combination: moved(s, held.pose) }, `${s.active}.position`), keptRef: held.keptRef, heldBack: held.heldBack };
       }),
     resetJoint: (joint) =>
       set((s) => {
         const joints = { ...activePose(s).joints };
         delete joints[joint];
-        return edit(s, { combination: withPose(s, { ...activePose(s), joints }) });
+        // Like a typed angle: kept things stay, and the blades are checked.
+        const held = keyEdit(s, { ...activePose(s), joints }, keptThrough(activeSetup(s), s.keep, [joint]));
+        return { ...edit(s, { combination: moved(s, held.pose) }), keptRef: held.keptRef, heldBack: held.heldBack };
       }),
     applyPreset: (preset, part = get().presetPart) => {
       const s = get();
@@ -659,7 +727,7 @@ export const useEditor = create<EditorState>((set, get) => {
       const id = ++dials;
       // The click and any dialling after it are one undo step.
       set(edit(s, { combination: moved(s, to) }, `drag.pose.${id}`, `Step ${s.stepIndex + 1} · ${s.active}: ${preset.name}`));
-      set({ dial: { id, name: preset.name, before, to, now: currentStep(get()).poses, amount: 1 } });
+      set({ dial: { id, fencer: s.active, name: preset.name, before, to, now: currentStep(get()).poses, amount: 1 } });
     },
     dial: null,
     setPoseAmount: (amount) => {
@@ -667,12 +735,13 @@ export const useEditor = create<EditorState>((set, get) => {
       const d = s.dial;
       if (!d || !poseDial(s)) return;
       const k = Math.min(1, Math.max(0, amount));
-      const f = s.active;
+      if (k === d.amount) return;
+      const f = d.fencer;
       // Always worked out from the poses before the click, so dialling back and forth leaves no trace.
       const pose = k >= 1 ? d.to : k <= 0 ? d.before[f] : tweenPose(d.before[f], d.to, k);
       const poses = k <= 0 ? d.before : pushBlades(s.combination, d.before, { ...d.before, [f]: pose }, f);
       const label = `Step ${s.stepIndex + 1} · ${f}: ${d.name}${k < 1 ? ` ${Math.round(k * 100)}%` : ''}`;
-      set(edit(s, { combination: withStep(s, (st) => ({ ...st, poses })) }, `drag.pose.${d.id}`, label));
+      set(edit(s, { combination: withStep(s, (st) => ({ ...st, poses })) }, dialKey(d), label));
       set({ dial: { ...d, now: currentStep(get()).poses, amount: k } });
     },
     applyStepPose: (stepIndex, from) => {
@@ -710,6 +779,8 @@ export const useEditor = create<EditorState>((set, get) => {
       const result = applyAction(base.combination, currentStep(base).poses, f, action, s.presets);
       // Blades too far apart to meet: nothing happens, and no step is added for it.
       if (result.apart) return { short: 0, close: false, apart: true };
+      // No room for the footwork at all: likewise.
+      if (result.cramped === 'blocked') return { short: 0, close: false, apart: false, cramped: 'blocked' };
       const short = result.short ?? 0;
       const part = `${f}: ${actionLabel(action)}`;
       const combination = withStep(base, (st) => {
@@ -723,12 +794,14 @@ export const useEditor = create<EditorState>((set, get) => {
         }
         return next;
       });
+      // Nothing changed at all (already there, and the label is the coach's own): leave history alone.
+      if (!newStep && !describeEdit(s.combination, combination)) return { short, close: !!result.close, apart: false, cramped: result.cramped };
       set({
         ...edit(s, { combination, stepIndex: base.stepIndex }, undefined, `Step ${base.stepIndex + 1} · ${part}`),
         // Shaping the path into the old step makes no sense on a new one.
         ...(newStep && { pathEdit: false }),
       });
-      return { short, close: !!result.close, apart: false };
+      return { short, close: !!result.close, apart: false, cramped: result.cramped };
     },
     actionsNewStep: rememberedFlag('actionsNewStep', false),
     toggleActionsNewStep: () =>
@@ -812,6 +885,8 @@ export const useEditor = create<EditorState>((set, get) => {
           past: s.past.slice(0, -1),
           future: [snapshot(s), ...s.future],
           lastEdit: null,
+          keptRef: null,
+          heldBack: null,
         };
       }),
     redo: () =>
@@ -823,11 +898,13 @@ export const useEditor = create<EditorState>((set, get) => {
           past: [...s.past, snapshot(s)],
           future: rest,
           lastEdit: null,
+          keptRef: null,
+          heldBack: null,
         };
       }),
 
     goToStep: (index) =>
-      set((s) => ({ stepIndex: Math.max(0, Math.min(s.combination.steps.length - 1, index)), lastEdit: null, pathEdit: false })),
+      set((s) => ({ stepIndex: Math.max(0, Math.min(s.combination.steps.length - 1, index)), lastEdit: null, pathEdit: false, heldBack: null })),
     addStep: () =>
       set((s) => {
         const steps = [...s.combination.steps];

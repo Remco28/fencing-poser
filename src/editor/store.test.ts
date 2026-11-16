@@ -1,4 +1,7 @@
+import { Vector3 } from 'three';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { dragDot } from '../ik/drag.ts';
+import { jointPosition, solveRig } from '../rig/kinematics.ts';
 import { START_X } from '../model/combination.ts';
 import { mirrorPose } from '../model/mirror.ts';
 import { JOINT_NAMES } from '../model/joints.ts';
@@ -452,5 +455,179 @@ describe('more from poses', () => {
     const edits = state().past.length;
     state().applyStepPose(0);
     expect(state().past).toHaveLength(edits);
+  });
+});
+
+describe('review round 1: the pose dial, labels and actions that change nothing', () => {
+  const lunge = BUILT_IN_PRESETS.find((p) => p.id === 'lunge')!;
+  const poses = () => currentStep(state()).poses;
+
+  it('never dials the other fencer: the dial hides when they are selected and comes back with its own', () => {
+    const before = poses();
+    state().applyPreset(lunge);
+    const lunged = poses();
+    state().setActive('B');
+    expect(poseDial(state())).toBeNull();
+    state().setPoseAmount(0.5);
+    expect(poses()).toBe(lunged);
+    expect(poses().B).toBe(before.B);
+    state().setActive('A');
+    expect(poseDial(state())).toEqual({ name: 'Lunge', amount: 1 });
+    state().setPoseAmount(0.5);
+    expect(poses().B).toEqual(before.B);
+    expect(state().change.label).toBe('Step 1 · A: Lunge 50%');
+  });
+
+  it('ends the dial after anything else, so a click and its dialling are always one undo step', () => {
+    const others: [string, () => void][] = [
+      ['another step and back', () => (state().goToStep(1), state().goToStep(0))],
+      ['undo then redo', () => (state().undo(), state().redo())],
+      ['a label', () => state().setStepText({ label: 'x' })],
+      ['what is shown', () => state().setDisplay({ distance: true })],
+      ['the students’ view', () => (state().setView({ position: [1, 2, 3], target: [0, 1, 0] }), state().setShot())],
+    ];
+    for (const [, between] of others) {
+      useEditor.setState(initial, true);
+      state().addStep();
+      state().goToStep(0);
+      state().applyPreset(lunge);
+      const lunged = pose();
+      const entries = state().past.length;
+      between();
+      expect(poseDial(state())).toBeNull();
+      state().setPoseAmount(0.5);
+      expect(pose()).toEqual(lunged);
+      expect(state().past.length - entries).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('adds nothing to history when the dial is set to where it already is', () => {
+    state().applyPreset(lunge);
+    const entries = state().past.length;
+    const now = state().combination;
+    state().setPoseAmount(1);
+    expect(state().combination).toBe(now);
+    expect(state().past).toHaveLength(entries);
+  });
+
+  it('leaves alone any label that is not made only of the names actions write', () => {
+    for (const typed of ['A: feint low', 'A: feint to hand, then disengage', 'A: Lunge (long)', 'B: Parry 5', 'Feint', 'A: Lunge · watch the hand']) {
+      useEditor.setState(initial, true);
+      state().setStepText({ label: typed });
+      state().act({ kind: 'extend' });
+      expect(currentStep(state()).label).toBe(typed);
+    }
+    // A label made only of such names is still extended, even after the coach corrected one of them.
+    useEditor.setState(initial, true);
+    state().act({ kind: 'parry', number: 6 });
+    state().setStepText({ label: 'A: Parry 4' });
+    state().setActive('B');
+    state().act({ kind: 'footwork', move: 'lunge' });
+    expect(currentStep(state()).label).toBe('A: Parry 4 · B: Lunge');
+  });
+
+  it('does nothing for an action that changes nothing on a step the coach named', () => {
+    state().act({ kind: 'footwork', move: 'recover' });
+    state().setStepText({ label: 'Back on guard' });
+    const entries = state().past.length;
+    const now = state().combination;
+    state().act({ kind: 'footwork', move: 'recover' });
+    expect(state().combination).toBe(now);
+    expect(state().past).toHaveLength(entries);
+    // In new-step mode the step is still added: the coach asked for one.
+    state().toggleActionsNewStep();
+    state().act({ kind: 'footwork', move: 'recover' });
+    expect(state().combination.steps).toHaveLength(2);
+  });
+});
+
+describe('review round 1: kept things win over keys, typed angles, Straighten and steps', () => {
+  const lunge = BUILT_IN_PRESETS.find((p) => p.id === 'lunge')!;
+  const extension = BUILT_IN_PRESETS.find((p) => p.id === 'extension')!;
+  const rigA = () => solveRig(state().combination.fencers.A, pose(), 0);
+  const at = (j: 'ankle_l' | 'ankle_r' | 'wrist_r') => jointPosition(rigA(), j);
+  const feetMoved = (from: { l: Vector3; r: Vector3 }) => Math.max(at('ankle_l').distanceTo(from.l), at('ankle_r').distanceTo(from.r));
+  const feet = () => ({ l: at('ankle_l'), r: at('ankle_r') });
+
+  it('stops a typed pelvis turn short rather than let a kept foot slip, and says so', () => {
+    state().applyPreset(lunge);
+    const before = feet();
+    const turn = angle(pose(), 'pelvis', 'turn');
+    state().setAngle('pelvis', 'turn', turn + 20);
+    expect(feetMoved(before)).toBeLessThan(0.015);
+    expect(angle(pose(), 'pelvis', 'turn')).toBeLessThan(turn + 20);
+    expect(state().heldBack).toMatch(/A’s feet are kept in place/);
+    // An edit that is not held back clears the message.
+    state().setAngle('neck', 'turn', 10);
+    expect(state().heldBack).toBeNull();
+  });
+
+  it('cannot walk a kept foot away with a held key, a slider, or R pressed again and again', () => {
+    state().applyPreset(lunge);
+    const before = feet();
+    state().select('pelvis');
+    for (let i = 0; i < 40; i++) state().nudge(0, 2);
+    expect(feetMoved(before)).toBeLessThanOrEqual(0.0201);
+    const turn = angle(pose(), 'pelvis', 'turn');
+    for (let i = 1; i <= 30; i++) state().setAngle('pelvis', 'turn', turn + i);
+    expect(feetMoved(before)).toBeLessThanOrEqual(0.0201);
+    for (let i = 0; i < 25; i++) state().resetJoint('pelvis');
+    expect(feetMoved(before)).toBeLessThanOrEqual(0.0201);
+  });
+
+  it('keeps kept feet when the pelvis is straightened, and leaves a leg the coach straightens alone', () => {
+    const before = feet();
+    state().resetJoint('pelvis');
+    expect(feetMoved(before)).toBeLessThan(0.015);
+    // A leg the coach straightens is theirs to move: its own foot is not kept, the other is.
+    const flex = angle(pose(), 'knee_r', 'flex');
+    state().setAngle('knee_r', 'flex', flex - 10);
+    expect(angle(pose(), 'knee_r', 'flex')).toBe(flex - 10);
+    expect(at('ankle_r').distanceTo(before.r)).toBeGreaterThan(0.02);
+    expect(at('ankle_l').distanceTo(before.l)).toBeLessThan(0.015);
+    // Straightened all the way, the longer leg would lift the body off the kept foot: it stops short and says so.
+    state().resetJoint('knee_r');
+    expect(at('ankle_l').distanceTo(before.l)).toBeLessThan(0.021);
+    expect(angle(pose(), 'knee_r', 'flex') === 0 || !!state().heldBack).toBe(true);
+  });
+
+  it('places a foot afresh after the coach moves it directly, instead of pulling it back', () => {
+    const start = feet();
+    state().setAngle('pelvis', 'lean', 5);
+    // A small direct edit of the right leg: under the allowance, but deliberate.
+    state().setAngle('knee_r', 'flex', angle(pose(), 'knee_r', 'flex') + 2);
+    const placed = at('ankle_r');
+    expect(placed.distanceTo(start.r)).toBeGreaterThan(0.001);
+    state().setAngle('neck', 'turn', 20);
+    expect(at('ankle_r').distanceTo(placed)).toBeLessThan(0.001);
+  });
+
+  it('steps the feet with the fencer while a kept hand stays, however many steps', () => {
+    state().toggleKeep('hand');
+    const hand = at('wrist_r');
+    const before = feet();
+    for (let i = 0; i < 6; i++) state().advance(0.01);
+    expect(at('ankle_l').x - before.l.x).toBeCloseTo(0.06, 2);
+    expect(at('wrist_r').distanceTo(hand)).toBeLessThan(0.015);
+    // Then far further than the arm is long: the step is cut short, the hand stays.
+    for (let i = 0; i < 12; i++) state().advance(0.25);
+    expect(at('wrist_r').distanceTo(hand)).toBeLessThan(0.015);
+    expect(state().heldBack).toMatch(/hand is kept in place/);
+    state().toggleKeep('hand');
+  });
+
+  it('keeps a kept hand through a hips drag with a straight arm', () => {
+    state().applyPreset(extension);
+    const from = pose();
+    const setup = state().combination.fencers.A;
+    const r0 = solveRig(setup, from, 0);
+    const hand = jointPosition(r0, 'wrist_r');
+    for (const d of [0.02, 0.06, 0.08, 0.1, 0.12, 0.3, 0.6]) {
+      const p = dragDot(from, setup, 0, 'hips', jointPosition(r0, 'pelvis').add(new Vector3(d, 0, 0)), { feet: true, hand: true, point: false });
+      expect(jointPosition(solveRig(setup, p, 0), 'wrist_r').distanceTo(hand)).toBeLessThan(0.015);
+    }
+    // Pulled back further than the arm is long, the hips stop where the hand can still be kept.
+    const far = dragDot(from, setup, 0, 'hips', jointPosition(r0, 'pelvis').add(new Vector3(-0.8, 0, 0)), { feet: false, hand: true, point: false });
+    expect(jointPosition(solveRig(setup, far, 0), 'wrist_r').distanceTo(hand)).toBeLessThan(0.015);
   });
 });

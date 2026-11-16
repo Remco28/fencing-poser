@@ -1,5 +1,6 @@
 import { Matrix3, Matrix4, Quaternion, Vector3 } from 'three';
 import { clampDof, type JointName, type Side } from '../model/joints.ts';
+import { tweenPose } from '../model/tween.ts';
 import { angle, type FencerSetup, type Pose } from '../model/types.ts';
 import { jointPosition, jointRotation, solveRig, type Rig } from '../rig/kinematics.ts';
 import { EPEE } from '../rig/layout.ts';
@@ -433,23 +434,143 @@ function armTip(st: Start, rig: Rig): (p: Pose) => Vector3 {
   };
 }
 
-/** Put the weapon hand and point back where they were, as far as `keep` asks. */
-function holdWeapon(st: Start, pose: Pose): Pose {
-  const { keep } = st;
-  if (!keep.hand && !keep.point) return pose;
-  const wrist = `wrist_${st.w}` as const;
-  const at = jointPosition(st.rig, wrist);
-  const facing = worldQ(st.rig.world[wrist]);
-  const tip = st.rig.tip;
+/** Where a hand is and which way it faces. */
+interface HandPlace {
+  at: Vector3;
+  facing: Quaternion;
+}
+
+/**
+ * Where the things that can be kept are: each foot, the weapon hand, and the
+ * point (with the hand that held it there).
+ */
+export interface Places {
+  foot_r: FootHold;
+  foot_l: FootHold;
+  hand: HandPlace;
+  point: HandPlace & { tip: Vector3 };
+}
+export type Kept = keyof Places;
+
+/** An edit is cut back until every kept thing is within this of its place (the rule is "about 2 cm"). */
+export const KEPT_WITHIN = 0.012;
+/** No edit may ever leave a kept thing further than this from its place. */
+export const KEPT_AT_MOST = 0.02;
+
+function placesOfRig(rig: Rig, w: Side): Places {
+  const [foot_r, foot_l] = footHolds(rig, ['r', 'l']);
+  const wrist = `wrist_${w}` as const;
+  const hand = { at: jointPosition(rig, wrist), facing: worldQ(rig.world[wrist]) };
+  return { foot_r, foot_l, hand, point: { ...hand, tip: rig.tip.clone() } };
+}
+
+/** Where everything that can be kept is, on this pose. */
+export function placesOf(pose: Pose, setup: FencerSetup, heading: number): Places {
+  return placesOfRig(solveRig(setup, pose, heading), weaponSide(setup));
+}
+
+/** Only the named places. */
+export function pick(places: Partial<Places>, kept: readonly Kept[]): Partial<Places> {
+  const out: Partial<Places> = {};
+  for (const k of kept) if (places[k]) Object.assign(out, { [k]: places[k] });
+  return out;
+}
+
+/** Where each of these kept things is on `rig`. */
+function keptAt(rig: Rig, w: Side, kept: Kept): Vector3 {
+  if (kept === 'point') return rig.tip;
+  return jointPosition(rig, kept === 'hand' ? `wrist_${w}` : kept === 'foot_r' ? 'ankle_r' : 'ankle_l');
+}
+
+/** How far a kept thing is from its place on this pose. */
+export function slipOf(place: Places[Kept], kept: Kept, pose: Pose, setup: FencerSetup, heading: number): number {
+  const at = kept === 'point' ? (place as Places['point']).tip : (place as FootHold | HandPlace).at;
+  return keptAt(solveRig(setup, pose, heading), weaponSide(setup), kept).distanceTo(at);
+}
+
+/** How far the furthest of these kept things is from its place. */
+function worstSlip(places: Partial<Places>, pose: Pose, setup: FencerSetup, heading: number): number {
+  const rig = solveRig(setup, pose, heading);
+  const w = weaponSide(setup);
+  let worst = 0;
+  for (const kept of Object.keys(places) as Kept[]) {
+    const place = places[kept]!;
+    const at = kept === 'point' ? (place as Places['point']).tip : (place as FootHold | HandPlace).at;
+    worst = Math.max(worst, keptAt(rig, w, kept).distanceTo(at));
+  }
+  return worst;
+}
+
+/**
+ * Kept things win. `at(k)` is the pose for a share `k` of an edit or a drag
+ * (0 = `from`, as it was; 1 = all of it), with the keeps already re-solved.
+ * If all of it leaves every kept thing within reach of its place, that is
+ * the answer; otherwise the largest share found by halving that does. The
+ * search is bounded, not exhaustive: it only ever returns a pose it checked,
+ * or `from` itself.
+ */
+function holdKept(
+  places: Partial<Places>,
+  from: Pose,
+  at: (k: number) => Pose,
+  setup: FencerSetup,
+  heading: number,
+  halvings = 8,
+): { pose: Pose; cut: boolean } {
+  // Within the allowance; or, for a fencer who already stands at its edge
+  // (an earlier edit was cut back there), no worse than they are, and never
+  // past the hard limit. So an edit elsewhere on the body is not refused
+  // over a millimetre of re-solving, and nothing can creep.
+  const was = worstSlip(places, from, setup, heading);
+  const ok = (p: Pose) => {
+    if (!finite(p)) return false;
+    const slip = worstSlip(places, p, setup, heading);
+    return slip <= KEPT_WITHIN || (slip <= KEPT_AT_MOST && slip <= was + 0.002);
+  };
+  const all = at(1);
+  if (ok(all)) return { pose: all, cut: false };
+  let lo = 0;
+  let hi = 1;
+  let best = from;
+  for (let i = 0; i < halvings; i++) {
+    const mid = (lo + hi) / 2;
+    const p = at(mid);
+    if (ok(p)) {
+      lo = mid;
+      best = p;
+    } else hi = mid;
+  }
+  return { pose: best, cut: true };
+}
+
+/**
+ * Put a kept weapon hand or point back where `places` has it, after the body
+ * moved. The elbow keeps pointing as it does unless the shoulder cannot put
+ * the hand back that way; then it may point down or out instead (`reachArm`).
+ */
+function holdWeaponAt(st: Start, pose: Pose, places: Partial<Places>): Pose {
+  if (!places.hand && !places.point) return pose;
   const r = st.build(pose);
-  if (keep.hand) {
-    let p = jointPosition(r, wrist).distanceTo(at) > STILL ? reach(pose, st.build, 'arm', st.w, at, undefined, facing) : pose;
-    if (keep.point && st.build(p).tip.distanceTo(tip) > STILL) p = safeAim(p, st.build, st.setup, tip);
+  if (places.hand) {
+    const { at, facing } = places.hand;
+    const wrist = jointPosition(r, `wrist_${st.w}`);
+    // Put back if the body's move carried the hand, or it is out of its allowance.
+    const carried = wrist.distanceTo(jointPosition(st.rig, `wrist_${st.w}`)) > STILL || wrist.distanceTo(at) > KEPT_WITHIN;
+    let p = carried && wrist.distanceTo(at) > STILL ? reachArm(st, pose, st.w, at, undefined, facing) : pose;
+    if (places.point && st.build(p).tip.distanceTo(places.point.tip) > STILL) p = safeAim(p, st.build, st.setup, places.point.tip);
     return p;
   }
+  const { tip, at, facing } = places.point!;
   if (r.tip.distanceTo(tip) <= STILL) return pose;
   // Keeping the whole hand as it was keeps the point; the aim then mends what the arm cannot.
   return settlePoint(st, pose, tip, at, facing);
+}
+
+/** A kept weapon hand or point goes back where it was when the drag began. */
+function holdWeapon(st: Start, pose: Pose): Pose {
+  const { keep } = st;
+  if (!keep.hand && !keep.point) return pose;
+  return holdWeaponAt(st, pose, pick(placesOfRig(st.rig, st.w), [...(keep.hand ? (['hand'] as Kept[]) : []), ...(keep.point ? (['point'] as Kept[]) : [])]));
 }
 
 /**
@@ -646,70 +767,94 @@ function finite(pose: Pose): boolean {
   return Object.values(pose.joints).every((a) => Object.values(a ?? {}).every((v) => v === undefined || Number.isFinite(v)));
 }
 
+/** The dot's own move, before kept things are checked. */
+function dragRaw(st: Start, dot: Dot, target: Vector3): Pose {
+  const { keep, setup } = st;
+  switch (dot) {
+    case 'hips':
+      return holdWeapon(st, hipsTo(st, target));
+    case 'hand_r':
+    case 'hand_l': {
+      const side: Side = dot === 'hand_r' ? 'r' : 'l';
+      const p = limbTo(st, 'arm', side, target, worldQ(st.rig.world[`wrist_${side}`]));
+      if (side !== st.w) return holdWeapon(st, p);
+      // The weapon hand moves; a kept point stays by the wrist turning.
+      return keep.point ? safeAim(p, st.build, setup, st.rig.tip) : p;
+    }
+    case 'foot_r':
+    case 'foot_l': {
+      const side: Side = dot === 'foot_r' ? 'r' : 'l';
+      // Feet stay on or above the floor, facing as they do.
+      const floor = target.clone().setY(Math.max(target.y, st.rig.layout.ankleHeight));
+      return holdWeapon(st, limbTo(st, 'leg', side, floor, worldQ(st.rig.world[`ankle_${side}`])));
+    }
+    case 'point':
+      return pointTo(st, target);
+    case 'elbow_r':
+    case 'elbow_l':
+    case 'knee_r':
+    case 'knee_l': {
+      const side: Side = dot.endsWith('_r') ? 'r' : 'l';
+      return swivel(st, dot.startsWith('elbow') ? 'arm' : 'leg', side, target);
+    }
+    case 'chest':
+      return holdWeapon(st, chestTo(st, target));
+    case 'head':
+      return headTo(st, target);
+  }
+}
+
 /**
  * Drag a dot to `target` (world space); returns the new pose. Whatever `keep`
- * names stays where it was, unless it is the dot being dragged.
+ * names stays where it was, unless it is the dot being dragged. `pose` is the
+ * pose the drag began with: a kept hand or point that the body would pull
+ * out of reach stops the dot short of the pointer instead of moving. (Kept
+ * feet stop the body the same way, inside each dot's own move.)
  */
 export function dragDot(pose: Pose, setup: FencerSetup, heading: number, dot: Dot, target: Vector3, keep: Keep = DEFAULT_KEEP): Pose {
   if (![target.x, target.y, target.z].every(Number.isFinite)) return pose;
   const st = begin(pose, setup, heading, keep);
-  const next = ((): Pose => {
-    switch (dot) {
-      case 'hips':
-        return holdWeapon(st, hipsTo(st, target));
-      case 'hand_r':
-      case 'hand_l': {
-        const side: Side = dot === 'hand_r' ? 'r' : 'l';
-        const p = limbTo(st, 'arm', side, target, worldQ(st.rig.world[`wrist_${side}`]));
-        if (side !== st.w) return holdWeapon(st, p);
-        // The weapon hand moves; a kept point stays by the wrist turning.
-        return keep.point ? safeAim(p, st.build, setup, st.rig.tip) : p;
-      }
-      case 'foot_r':
-      case 'foot_l': {
-        const side: Side = dot === 'foot_r' ? 'r' : 'l';
-        // Feet stay on or above the floor, facing as they do.
-        const floor = target.clone().setY(Math.max(target.y, st.rig.layout.ankleHeight));
-        return holdWeapon(st, limbTo(st, 'leg', side, floor, worldQ(st.rig.world[`ankle_${side}`])));
-      }
-      case 'point':
-        return pointTo(st, target);
-      case 'elbow_r':
-      case 'elbow_l':
-      case 'knee_r':
-      case 'knee_l': {
-        const side: Side = dot.endsWith('_r') ? 'r' : 'l';
-        return swivel(st, dot.startsWith('elbow') ? 'arm' : 'leg', side, target);
-      }
-      case 'chest':
-        return holdWeapon(st, chestTo(st, target));
-      case 'head':
-        return headTo(st, target);
-    }
-  })();
-  return finite(next) ? next : pose;
+  const solve = (t: Vector3) => {
+    const p = dragRaw(st, dot, t);
+    return finite(p) ? p : pose;
+  };
+  const hand: Dot = `hand_${st.w}`;
+  const kept: Kept[] = [...(keep.hand && dot !== hand ? (['hand'] as Kept[]) : []), ...(keep.point && dot !== 'point' ? (['point'] as Kept[]) : [])];
+  if (!kept.length) return solve(target);
+  const start = dotPositions(st.rig)[dot];
+  return holdKept(pick(placesOfRig(st.rig, st.w), kept), pose, (k) => solve(k >= 1 ? target : start.clone().lerp(target, k)), setup, heading, 6).pose;
 }
 
-/**
- * After an edit that was not a drag (a key, a typed angle): put back whatever
- * `keep` names. `before` is the pose before the edit, `after` the pose the
- * edit made. A limb containing one of the `edited` joints is left alone, so
- * bending a knee by hand is never undone by its own foot being kept.
- */
-export function keepInPlace(before: Pose, after: Pose, setup: FencerSetup, heading: number, keep: Keep, edited: JointName[] = []): Pose {
-  if (!keep.feet && !keep.hand && !keep.point) return after;
+/** Which things `keep` holds through an edit of the `edited` joints: never a limb the coach is editing directly. */
+export function keptThrough(setup: FencerSetup, keep: Keep, edited: readonly JointName[] = []): Kept[] {
   const w = weaponSide(setup);
   const legEdited = (s: Side) => edited.some((j) => j === `hip_${s}` || j === `knee_${s}` || j === `ankle_${s}`);
   const armEdited = edited.some((j) => j === `shoulder_${w}` || j === `elbow_${w}` || j === `wrist_${w}`);
-  const st = begin(before, setup, heading, { feet: false, hand: keep.hand && !armEdited, point: keep.point && !armEdited && !edited.includes('grip') });
+  return [
+    ...(keep.feet ? (['r', 'l'] as Side[]).filter((s) => !legEdited(s)).map((s) => `foot_${s}` as Kept) : []),
+    ...(keep.hand && !armEdited ? (['hand'] as Kept[]) : []),
+    ...(keep.point && !armEdited && !edited.includes('grip') ? (['point'] as Kept[]) : []),
+  ];
+}
+
+/**
+ * Re-solve the limbs so the things in `places` are back where it has them,
+ * after an edit made `after`. The pelvis stays where the edit put it, at the
+ * height it had in `base`, sinking only while that lets a leg reach its foot.
+ */
+function solveKeeps(places: Partial<Places>, base: Pose, after: Pose, setup: FencerSetup, heading: number): Pose {
+  const st = begin(base, setup, heading, { feet: false, hand: !!places.hand, point: !!places.point });
   let pose = after;
   let r = st.build(after);
 
-  const sides = keep.feet ? (['r', 'l'] as Side[]).filter((s) => !legEdited(s)) : [];
-  const holds = footHolds(st.rig, sides);
+  const holds = [places.foot_r, places.foot_l].filter((f): f is FootHold => !!f);
+  // Feet are put back only if this edit moved one (or one is out of its
+  // allowance): an edit elsewhere on the body leaves the legs exactly alone.
   const slipped = holds.some((f) => {
     const a = `ankle_${f.side}` as const;
-    return jointPosition(r, a).distanceTo(f.at) > STILL || worldQ(r.world[a]).angleTo(f.facing) > 0.002;
+    const now = jointPosition(r, a);
+    const moved = now.distanceTo(jointPosition(st.rig, a)) > STILL || worldQ(r.world[a]).angleTo(worldQ(st.rig.world[a])) > 0.002;
+    return moved || now.distanceTo(f.at) > KEPT_WITHIN;
   });
   if (slipped) {
     // The pelvis stays where it was (it may have turned or leant, or slid if
@@ -742,5 +887,53 @@ export function keepInPlace(before: Pose, after: Pose, setup: FencerSetup, headi
       pose = plantFeet(after, setup, heading, new Vector3(after.root.x, y, after.root.z), holds);
     }
   }
-  return holdWeapon(st, pose);
+  return holdWeaponAt(st, pose, places);
+}
+
+/**
+ * An edit that was not a drag (a key, a typed angle, Straighten) took the
+ * fencer from `before` to `after`. Keep the things in `places` where it has
+ * them: if all of the edit would pull one out of reach, only as much of the
+ * edit as keeps them is applied (joint angle by joint angle), and `cut` says
+ * so. `places` are where those things should stay, which may be where they
+ * were several edits ago: that is what stops a held key from walking a kept
+ * foot away a little at a time.
+ */
+export function editKept(places: Partial<Places>, before: Pose, after: Pose, setup: FencerSetup, heading: number): { pose: Pose; cut: boolean } {
+  if (!Object.keys(places).length) return { pose: after, cut: false };
+  return holdKept(places, before, (k) => solveKeeps(places, before, k >= 1 ? after : tweenPose(before, after, k), setup, heading), setup, heading);
+}
+
+/**
+ * After an edit that was not a drag (a key, a typed angle): put back whatever
+ * `keep` names, taking their places from `before`. A limb containing one of
+ * the `edited` joints is left alone, so bending a knee by hand is never
+ * undone by its own foot being kept. If the edit would pull a kept thing out
+ * of reach, the edit stops short instead.
+ */
+export function keepInPlace(before: Pose, after: Pose, setup: FencerSetup, heading: number, keep: Keep, edited: JointName[] = []): Pose {
+  const kept = keptThrough(setup, keep, edited);
+  if (!kept.length) return after;
+  return editKept(pick(placesOf(before, setup, heading), kept), before, after, setup, heading).pose;
+}
+
+/**
+ * Slide the whole fencer along (and across) the piste. The feet travel with
+ * the fencer, as a step must; a kept weapon hand or point stays in `places`
+ * (by default where it is on `pose`), the arm re-solving, and the slide stops
+ * short if the arm cannot manage it.
+ */
+export function slideFencer(
+  pose: Pose,
+  setup: FencerSetup,
+  heading: number,
+  x: number,
+  z: number,
+  keep: Keep,
+  places?: Partial<Places>,
+): { pose: Pose; cut: boolean } {
+  const to: Pose = { ...pose, root: { ...pose.root, x, z } };
+  const kept: Kept[] = [...(keep.hand ? (['hand'] as Kept[]) : []), ...(keep.point ? (['point'] as Kept[]) : [])];
+  if (!kept.length) return { pose: to, cut: false };
+  return editKept(pick(places ?? placesOf(pose, setup, heading), kept), pose, to, setup, heading);
 }

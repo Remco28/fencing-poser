@@ -39,8 +39,11 @@ export function ActionsPanel({ children }: { children?: ReactNode }) {
   const first = s.stepIndex === 0;
 
   const run = (action: Action) => {
-    const { short, close, apart } = s.act(action);
+    const { short, close, apart, cramped } = s.act(action);
     if (apart) return setMessage('The blades are too far apart to meet: step in first.');
+    if (cramped === 'blocked') return setMessage(`No room: ${me} is already at ${opp}’s feet. Step back first.`);
+    if (cramped === 'short' && action.kind === 'footwork')
+      return setMessage(`${opp} is close: ${me} went only as far as there was room, with the back foot where it was.`);
     if (action.kind !== 'hit' || !short) return setMessage('');
     if (close) return setMessage(`${opp}’s ${TARGET_NAMES[action.area].toLowerCase()} is too close for ${me}’s point to land: step back first.`);
     const gap = `${me}’s point is ${formatDistance(short, s.units)} short of ${opp}’s ${TARGET_NAMES[action.area].toLowerCase()}`;

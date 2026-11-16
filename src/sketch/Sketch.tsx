@@ -2,14 +2,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEven
 import { Vector3 } from 'three';
 import { INK_SOFT } from '../design.ts';
 import { HANDLE_COLOR, nextDragId } from '../ik/Handles.tsx';
-import { DOT_JOINT, DOTS, dotPositions, dragDot, headCentre, keptDots, type Dot } from '../ik/drag.ts';
+import { DOT_JOINT, DOTS, dotPositions, dragDot, headCentre, keptDots, slideFencer, type Dot } from '../ik/drag.ts';
 import { FENCERS, HEADING, type FencerId } from '../model/combination.ts';
 import type { FencerSetup, Pose } from '../model/types.ts';
 import { formatDistance } from '../model/units.ts';
 import { jointPosition, solveRig, type Rig } from '../rig/kinematics.ts';
 import { frontToe } from '../scene/measure.ts';
 import { PISTE } from '../scene/Piste.tsx';
-import { activePose, currentStep, useEditor } from '../editor/store.ts';
+import { currentStep, useEditor } from '../editor/store.ts';
 import { Toggle } from '../ui/Toggle.tsx';
 import { frameAt, keyAt } from '../viewer/player.ts';
 import { toFlat, toWorld, type Flat, type SketchView } from './project.ts';
@@ -167,7 +167,7 @@ function camFor(box: Box, w: number, h: number): Cam {
 
 type Drag =
   | { kind: 'dot'; f: FencerId; dot: Dot; start: Vector3; from: Pose; id: number; x0: number; y0: number; moved: boolean }
-  | { kind: 'floor'; f: FencerId; root: Pose['root']; id: number; x0: number; y0: number; moved: boolean }
+  | { kind: 'floor'; f: FencerId; from: Pose; id: number; x0: number; y0: number; moved: boolean }
   | { kind: 'pan'; cam: Cam; x0: number; y0: number };
 
 export function Sketch() {
@@ -316,7 +316,7 @@ export function Sketch() {
     if (!editable || e.button !== 0) return;
     posing(f);
     const { x, y } = local(e);
-    begin({ kind: 'floor', f, root: { ...poses[f].root }, id: nextDragId(), x0: x, y0: y, moved: false }, e);
+    begin({ kind: 'floor', f, from: poses[f], id: nextDragId(), x0: x, y0: y, moved: false }, e);
   };
 
   const onBackgroundDown = (e: ReactPointerEvent) => {
@@ -345,10 +345,12 @@ export function Sketch() {
       st.dragPose(dragDot(d.from, st.combination.fencers[d.f], HEADING[d.f], d.dot, target, st.keep), d.id);
     } else {
       // Along the piste; from above, across it too.
-      const root = { ...activePose(st).root };
-      root.x = Math.max(-PISTE_HALF, Math.min(PISTE_HALF, d.root.x + (x - d.x0) / c.k));
-      if (view === 'above') root.z = Math.max(-PISTE.width / 2, Math.min(PISTE.width / 2, d.root.z + (y - d.y0) / c.k));
-      st.dragPose({ ...activePose(st), root }, d.id);
+      // Worked out from the pose the drag began with, like a dot. The feet
+      // travel with the fencer; a kept hand or point stays where it was.
+      const from = d.from.root;
+      const rx = Math.max(-PISTE_HALF, Math.min(PISTE_HALF, from.x + (x - d.x0) / c.k));
+      const rz = view === 'above' ? Math.max(-PISTE.width / 2, Math.min(PISTE.width / 2, from.z + (y - d.y0) / c.k)) : from.z;
+      st.dragPose(slideFencer(d.from, st.combination.fencers[d.f], HEADING[d.f], rx, rz, st.keep).pose, d.id);
     }
   };
 

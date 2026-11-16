@@ -6,6 +6,7 @@ import type { Pose } from '../model/types.ts';
 import { BUILT_IN_PRESETS } from '../presets/builtin.ts';
 import { poseFromPreset } from '../presets/library.ts';
 import { closestBetween, outsideOf } from '../ik/blades.ts';
+import { dragDot } from '../ik/drag.ts';
 import { jointPosition, solveRig, type Rig } from '../rig/kinematics.ts';
 import { frontToe, pointReach } from '../scene/measure.ts';
 import { frameAt } from '../viewer/player.ts';
@@ -297,5 +298,104 @@ describe('labels', () => {
     expect(actionLabel({ kind: 'hit', area: 'arm', with: 'lunge' })).toBe('Hits the arm with a lunge');
     expect(actionLabel({ kind: 'hit', area: 'body', with: 'arm' })).toBe('Hits the body');
     expect(actionLabel({ kind: 'hit', area: 'leg', with: 'fleche' })).toBe('Hits the front leg with a flèche');
+  });
+});
+
+describe('review round 1: footwork is measured from the back foot', () => {
+  const rearAnkle = (c: Combination, p: Poses, f: FencerId) => jointPosition(rig(c, p, f), `ankle_${rear(c, f)}`);
+  const step = (c: Combination, p: Poses, f: FencerId, move: Extract<Action, { kind: 'footwork' }>['move']) => act(c, p, f, { kind: 'footwork', move });
+
+  it.each(variants)('keeps a back foot that stands off the line where it is, along and across (%s)', (_, c, f) => {
+    const p0 = start(c);
+    // The coach drags the back foot 15 cm across the piste.
+    const foot = `foot_${rear(c, f)}` as const;
+    const target = rearAnkle(c, p0, f).add(new Vector3(0, 0, 0.15));
+    const p = { ...p0, [f]: dragDot(p0[f], c.fencers[f], HEADING[f], foot, target) };
+    const placed = rearAnkle(c, p, f);
+    expect(placed.distanceTo(target)).toBeLessThan(0.02);
+    for (const move of ['lunge', 'half-lunge', 'recover'] as const) {
+      const after = rearAnkle(c, step(c, p, f, move).poses, f);
+      expect(Math.hypot(after.x - placed.x, after.z - placed.z)).toBeLessThan(0.01);
+    }
+  });
+
+  it.each(variants)('advances and retreats one step of the back foot, from a lunge as from en garde (%s)', (_, c, f) => {
+    const guard = start(c);
+    const lunged = step(c, guard, f, 'lunge').poses;
+    // A lunge made by hand: the front foot dragged 40 cm forward.
+    const front = `foot_${side(c, f)}` as const;
+    const reach = jointPosition(rig(c, guard, f), `ankle_${side(c, f)}`).add(new Vector3(0.4 * FORWARD[f], 0, 0));
+    const dragged = { ...guard, [f]: dragDot(guard[f], c.fencers[f], HEADING[f], front, reach) };
+    for (const from of [guard, lunged, dragged]) {
+      const was = rearAnkle(c, from, f);
+      const adv = rearAnkle(c, step(c, from, f, 'advance').poses, f);
+      const ret = rearAnkle(c, step(c, from, f, 'retreat').poses, f);
+      expect((adv.x - was.x) * FORWARD[f]).toBeCloseTo(STEP_LENGTH, 2);
+      expect((ret.x - was.x) * FORWARD[f]).toBeCloseTo(-STEP_LENGTH, 2);
+      expect(Math.abs(adv.z - was.z)).toBeLessThan(0.01);
+    }
+    // And neither touches the weapon arm.
+    const extended = act(c, guard, f, { kind: 'extend' }).poses;
+    const advanced = step(c, extended, f, 'advance').poses;
+    for (const n of weaponArm(c, f)) expect(advanced[f].joints[n]).toEqual(extended[f].joints[n]);
+  });
+
+  it.each(variants)('runs a flèche to the same place from a lunge as from en garde (%s)', (_, c, f) => {
+    const guard = start(c);
+    const lunged = step(c, guard, f, 'lunge').poses;
+    const a = rearAnkle(c, step(c, guard, f, 'fleche').poses, f);
+    const b = rearAnkle(c, step(c, lunged, f, 'fleche').poses, f);
+    expect(a.distanceTo(b)).toBeLessThan(0.01);
+  });
+
+  it.each(variants)('lunges shallower when the opponent is close, with the back foot where it is (%s)', (_, c, f) => {
+    // Nearly touching: hips 1.1 m apart.
+    const p = apart(c, 0.55);
+    const was = rearAnkle(c, p, f);
+    for (const move of ['lunge', 'half-lunge'] as const) {
+      const r = step(c, p, f, move);
+      if (r.cramped === 'blocked') {
+        expect(r.poses).toBe(p);
+        continue;
+      }
+      expect(r.cramped).toBe('short');
+      expect(rearAnkle(c, r.poses, f).distanceTo(was)).toBeLessThan(0.01);
+      expect(toeAlong(c, r.poses, f)).toBeLessThanOrEqual(-toeAlong(c, r.poses, other(f)) + 1e-6);
+    }
+    // A hit with a lunge from there keeps the back foot too.
+    const hit = act(c, p, f, { kind: 'hit', area: 'body', with: 'lunge' });
+    expect(Math.abs(rearAnkle(c, hit.poses, f).x - was.x)).toBeLessThan(0.01);
+  });
+
+  it.each(variants)('does not advance into the opponent, and never backward (%s)', (_, c, f) => {
+    // Room for part of a step only.
+    const p = apart(c, 0.6);
+    const was = rearAnkle(c, p, f);
+    const r = step(c, p, f, 'advance');
+    const now = rearAnkle(c, r.poses, f);
+    expect((now.x - was.x) * FORWARD[f]).toBeGreaterThan(0.01);
+    expect((now.x - was.x) * FORWARD[f]).toBeLessThan(STEP_LENGTH - 0.01);
+    expect(r.cramped).toBe('short');
+    expect(toeAlong(c, r.poses, f)).toBeLessThanOrEqual(-toeAlong(c, r.poses, other(f)) + 1e-6);
+    // Toes already overlapping: nothing moves, and it says so.
+    const jammed = apart(c, 0.4);
+    for (const move of ['advance', 'fleche', 'lunge'] as const) {
+      const blocked = step(c, jammed, f, move);
+      expect(blocked.cramped).toBe('blocked');
+      expect(blocked.poses).toBe(jammed);
+    }
+    // Retreat is always possible, and goes back.
+    const back = rearAnkle(c, step(c, jammed, f, 'retreat').poses, f);
+    expect((back.x - rearAnkle(c, jammed, f).x) * FORWARD[f]).toBeCloseTo(-STEP_LENGTH, 2);
+  });
+
+  it.each(variants)('keeps the back foot under a hit with a lunge that has to lean in (%s)', (_, c, f) => {
+    let p = apart(c, 1.1);
+    p = act(c, p, f, { kind: 'distance', measure: 'medium' }).poses;
+    const was = rearAnkle(c, p, f);
+    const hit = act(c, p, f, { kind: 'hit', area: 'body', with: 'lunge' });
+    expect(hit.short).toBe(0);
+    const now = rearAnkle(c, hit.poses, f);
+    expect(Math.hypot(now.x - was.x, now.z - was.z)).toBeLessThan(0.01);
   });
 });
