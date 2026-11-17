@@ -117,7 +117,7 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
   return (
     <div className="viewer">
       <div className="viewer-scene">
-        <Canvas shadows camera={{ position: [0.6, 2.8, 8.4], fov: 40 }}>
+        <Canvas shadows frameloop="demand" camera={{ position: [0.6, 2.8, 8.4], fov: 40 }}>
           <Environment />
           {FENCERS.map((f) => (
             <Mannequin
@@ -146,7 +146,7 @@ export function Viewer({ combination: c, units = 'metric' }: { combination: Comb
           />
           <CameraRig flight={flight} fitAspect />
           {playing && follow && <CameraDriver fit view={frame.camera ?? viewFor('side', shown)} />}
-          <Ticker onTick={onTick} />
+          {playing && <Ticker onTick={onTick} />}
         </Canvas>
 
         <header className="viewer-top">

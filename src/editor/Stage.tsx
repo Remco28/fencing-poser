@@ -37,6 +37,7 @@ export function Stage() {
   const s = useEditor();
   const desk = useUi((u) => u.desk);
   const posing = useUi((u) => u.posing);
+  const clear = useUi((u) => u.clear);
   const editingStep = currentStep(s);
   // While previewing, show the in-between frame and the step it belongs to.
   const playing = !!s.preview;
@@ -106,6 +107,7 @@ export function Stage() {
     <>
       <Canvas
         shadows
+        frameloop="demand"
         camera={{ position: [-2.4, 4.4, 9.5], fov: EDITOR_FOV }}
         // A click on the bare desk lets go of the joint. It does not put the fencer
         // down: a click that just misses an arm would close the tray (Esc or its × do that).
@@ -181,8 +183,8 @@ export function Stage() {
           // The view is the coach's own, playing or not: it moves only when they move it.
           zoomToCursor
         />
-        <ClearView clear={() => useUi.getState().clear} />
-        {playing && <Ticker onTick={s.tickPreview} />}
+        <ClearView clear={clear} />
+        {s.preview?.playing && <Ticker onTick={s.tickPreview} />}
         <CameraRig flight={s.flight} onView={s.setView} />
         <FitRig
           request={s.fitRequest}

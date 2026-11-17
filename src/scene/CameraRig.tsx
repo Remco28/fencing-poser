@@ -46,9 +46,10 @@ export function CameraRig({
   fitAspect?: boolean;
 }) {
   const camera = useThree((s) => s.camera);
+  const invalidate = useThree((s) => s.invalidate);
   const aspect = useThree((s) => s.size.width / s.size.height);
   const controls = useThree((s) => s.controls) as unknown as Controls | null;
-  const moving = useRef<{ fromPos: Vector3; toPos: Vector3; fromTarget: Vector3; toTarget: Vector3; t: number } | null>(null);
+  const moving = useRef<{ fromPos: Vector3; toPos: Vector3; fromTarget: Vector3; toTarget: Vector3; t: number; started: boolean } | null>(null);
   const report = useRef(onView);
   report.current = onView;
   const current = () => ({ position: camera.position.toArray(), target: controls!.target.toArray() }) as StepCamera;
@@ -62,10 +63,12 @@ export function CameraRig({
       fromTarget: controls.target.clone(),
       toTarget: new Vector3(...view.target),
       t: 0,
+      started: false,
     };
+    invalidate();
     // Refit only when a new flight starts, not on every resize.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flight, controls, camera]);
+  }, [flight, controls, camera, invalidate]);
 
   useEffect(() => {
     if (!controls) return;
@@ -81,7 +84,9 @@ export function CameraRig({
   useFrame((_, delta) => {
     const m = moving.current;
     if (!m || !controls) return;
-    m.t = Math.min(1, m.t + delta / FLIGHT_SECONDS);
+    // Waking a resting canvas must not count its idle time as flight time.
+    if (m.started) m.t = Math.min(1, m.t + delta / FLIGHT_SECONDS);
+    m.started = true;
     const k = m.t < 0.5 ? 2 * m.t * m.t : 1 - (-2 * m.t + 2) ** 2 / 2;
     camera.position.lerpVectors(m.fromPos, m.toPos, k);
     controls.target.lerpVectors(m.fromTarget, m.toTarget, k);
@@ -89,7 +94,7 @@ export function CameraRig({
     if (m.t === 1) {
       moving.current = null;
       report.current?.(current());
-    }
+    } else invalidate();
   });
 
   return null;
